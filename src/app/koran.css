@@ -1,0 +1,75 @@
+/* Koran Weton: halaman depan koran pelabuhan. Dimuat setelah globals.css; selektor .halaman.koran menimpa gaya judul halaman biasa. */
+.halaman.koran { max-width: 960px; }
+
+/* kepala koran: aturan tebal, judul sempit dan berat, tanggal di antara dua garis */
+.koran-kepala { padding: 14px 0 10px; border-top: 8px solid var(--teks); border-bottom: 2px solid var(--teks); }
+.halaman.koran h1 {
+  margin: 0; font-size: clamp(54px, 15vw, 112px); line-height: 0.9; font-variation-settings: 'wdth' 64; letter-spacing: -0.015em;
+}
+.halaman.koran h1::before {
+  content: ''; display: inline-block; width: 0.17em; height: 0.64em; margin-right: 0.14em; border-radius: 0.05em 0.05em 0.01em 0.01em; background: var(--bollard);
+}
+.koran-baris { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 24px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--teks); font-size: 15px; }
+.koran-baris p { margin: 0; }
+.koran-tanggal { font-weight: 700; }
+
+/* berita */
+.berita { margin-top: 28px; }
+.halaman.koran .berita h2 {
+  display: block; margin: 0 0 6px; padding: 0; border: 0; font-size: 26px; line-height: 1.08; font-variation-settings: 'wdth' 82; text-wrap: balance;
+}
+.halaman.koran .berita-utama h2 { font-size: clamp(32px, 7.4vw, 58px); line-height: 1.02; font-variation-settings: 'wdth' 78; }
+.berita .oleh { margin: 0 0 14px; color: var(--redup); font-size: 14.5px; line-height: 1.4; }
+.berita .teks p { margin: 0 0 14px; max-width: 62ch; font-size: 17px; line-height: 1.68; }
+.berita-utama .teks p { font-size: 18px; }
+.berita-utama .teks p:first-child::first-letter {
+  float: left; margin: 5px 10px 0 0; font-family: var(--tampil); font-weight: 800; font-variation-settings: 'wdth' 70; font-size: 4em; line-height: 0.78;
+}
+.lainnya { display: grid; gap: 0 44px; margin-top: 36px; }
+.lainnya .berita { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--teks); }
+@media (min-width: 900px) {
+  .berita-utama .teks { columns: 2; column-gap: 44px; column-rule: 1px solid var(--garis); }
+  .berita-utama .teks p { max-width: none; }
+  .lainnya { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.besok { margin-top: 40px; padding: 14px 18px 12px; border: 2px dashed var(--teks); border-radius: 14px; background: var(--kertas); }
+.besok strong { font-family: var(--tampil); font-weight: 800; font-variation-settings: 'wdth' 85; font-size: 20px; }
+.besok p { margin: 2px 0 0; }
+
+/* edisi lainnya */
+.halaman.koran .arsip { margin-top: 56px; }
+.arsip ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.arsip li { border-top: 1px solid var(--garis); }
+.arsip a { display: grid; grid-template-columns: 26ch minmax(0, 1fr); gap: 2px 20px; padding: 12px 4px; text-decoration: none; }
+.arsip-tgl { color: var(--redup); font-size: 14.5px; }
+.arsip-judul { font-family: var(--tampil); font-weight: 800; font-variation-settings: 'wdth' 85; font-size: 19px; line-height: 1.2; }
+.arsip a:hover .arsip-judul { text-decoration: underline; text-decoration-color: var(--bollard); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+@media (max-width: 640px) { .arsip a { grid-template-columns: minmax(0, 1fr); } }
+
+/* kartu ringkas di Beranda */
+.koran-ringkas {
+  display: grid; gap: 2px; margin: 0 0 14px; padding: 12px 16px 12px 18px; border: 1px solid var(--garis); border-left: 6px solid var(--bollard);
+  border-radius: 4px 16px 16px 4px; background: var(--kertas); text-decoration: none;
+}
+.koran-ringkas:hover { background: var(--kapur); }
+.koran-nama { display: flex; align-items: center; gap: 8px; color: var(--redup); font-size: 14px; font-weight: 700; }
+.koran-ringkas .baru { padding: 1px 8px; border-radius: 999px; background: var(--bollard); color: #1b1500; font-size: 12px; font-weight: 800; }
+.koran-judul { font-family: var(--tampil); font-weight: 800; font-variation-settings: 'wdth' 85; font-size: clamp(19px, 4.6vw, 24px); line-height: 1.15; }
+.koran-tgl { color: var(--redup); font-size: 14px; }
+
+/* ---------- meja redaksi (Wali Kota) ---------- */
+.tulis-koran > .tombol-utama { margin: 8px 0 20px; }
+.tulis-draf { display: grid; gap: 14px; margin: 12px 0 28px !important; }
+.tulis-berita { display: grid; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--garis); border-radius: 12px; }
+.tulis-berita legend { padding: 0 6px; font-weight: 800; }
+.tulis-label { display: grid; gap: 4px; font-size: 14px; font-weight: 700; color: var(--redup); }
+.tulis-label input, .tulis-label select, .tulis-label textarea {
+  min-height: 44px; padding: 8px 10px; border: 2px solid var(--garis); border-radius: 10px; background: var(--kertas); color: var(--teks);
+  font: inherit; font-weight: 400; font-size: 16px;
+}
+.tulis-label textarea { resize: vertical; line-height: 1.55; }
+.tulis-tombol { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.tulis-daftar { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.tulis-daftar li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.tulis-daftar p { margin: 4px 0 0; }

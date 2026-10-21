@@ -1,0 +1,43 @@
+{
+  "name": "weton-city",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3600",
+    "build": "next build",
+    "start": "next start --port 3600",
+    "tipe": "tsc --noEmit",
+    "cek": "node scripts/cek-data.ts",
+    "sim": "node scripts/sim-ekonomi.ts",
+    "aset": "node scripts/cek-aset.ts",
+    "periksa": "pnpm tipe && pnpm cek && pnpm sim && pnpm aset",
+    "db:migrasi": "node scripts/db.ts migrasi",
+    "db:hidup": "node scripts/db-hidup.ts",
+    "uji:server": "node scripts/uji-server.ts",
+    "ukur": "node scripts/ukur-kueri.ts",
+    "smoke": "node scripts/smoke-server.ts",
+    "walikota": "node scripts/buat-walikota.ts",
+    "push:kunci": "node scripts/push.ts kunci",
+    "push:kirim": "node scripts/push.ts kirim"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "next": "^16.4.2",
+    "postgres": "^3.4.9",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1",
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@types/web-push": "3.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
