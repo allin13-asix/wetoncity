@@ -1,10 +1,11 @@
 // Uji integrasi server Fase 0, fitur kota (migrasi 004), dan Fase 1 awal (migrasi 005). Jalankan: pnpm uji:server
 // Memakai DATABASE_URL_UJI, satu skema sementara per jalan, waktu dipalsukan lewat parameter `sekarang`.
-// Gagal (exit 1) bila ada pemeriksaan yang tidak terpenuhi. RINCI=1 menampilkan jejak galat lengkap.
+// Gagal (exit 1) bila ada pemeriksaan yang tidak terpenuhi. RINCI=1 menampilkan jejak galat lengkap; SARING=teks hanya menjalankan uji yang namanya memuat teks itu.
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { BONUS_HARIAN, MODAL_AWAL, TENAGA, UMK_AWAL, pajakBulanan } from '../src/data/ekonomi.ts'
+import { LATIHAN } from '../src/data/balans.ts'
 import { koran } from '../src/data/koran.ts'
 import { SESI_CACHE_MS, buatSesi, cariSesi, daftar, hapusSesi, masuk } from '../src/server/akun.ts'
 import {
@@ -59,6 +60,28 @@ const baris = async (id: string) => (await sql<Warga[]>`select * from warga wher
 const jenisLedger = (id: string) => sql<{ akun: string; jenis: string; jumlah: number }[]>`select akun, jenis, jumlah from ledger where warga_id = ${id} order by id`
 const upahKuli = (n: number) => upahAksi(pekerjaanById('kuli-angkut')!, 1, n)
 const hitung = async (kueri: Promise<{ n: number }[]>) => (await kueri)[0].n
+/**
+ * Muat pada `t` untuk warga yang selalu makan cukup. Uji tagihan melompati hari tanpa makan; tanpa ini warga uji
+ * kelaparan dan biaya rawat inap mencemari angka tagihan yang sedang diuji (lapar diuji tersendiri).
+ */
+const kenyang = (id: string, t: Date) => sql`update warga set lapar = 100, lapar_pada = ${t}, lapar_hukum_pada = null where id = ${id}`
+const muatKenyang = async (id: string, t: Date) => {
+  await kenyang(id, t)
+  return muat(sql, id, t)
+}
+/** Kursus Keahlian berturut-turut sampai `sampai`, menunggu tiap kursus dan masa jedanya. Mengembalikan keadaan dan waktunya. */
+async function naikKeahlian(id: string, sampai: number, t: Date): Promise<{ k: Keadaan; t: Date }> {
+  // syarat Kecerdasan dan Disiplin naik tiap level; uji ini tentang kursus Keahlian, jadi atribut dibuat cukup
+  await sql`update warga set kecerdasan = 20, disiplin = 20 where id = ${id}`
+  let k = await muatKenyang(id, t)
+  while (k.keahlian < sampai) {
+    await kenyang(id, t)
+    k = await kursus(sql, id, kunci(), t)
+    t = new Date(Date.parse(k.latihan!.selesai) + LATIHAN.cooldownMs + 1000)
+    k = await muatKenyang(id, t)
+  }
+  return { k, t }
+}
 
 async function galat(kode: string, p: Promise<unknown>) {
   try {
@@ -223,7 +246,7 @@ uji('Rusunawa: Keahlian 6 ke atas tidak memenuhi syarat', async () => {
 uji('Rusunawa: wajib pindah 28 hari setelah Keahlian 6', async () => {
   const id = await baru()
   await sql`update warga set hunian_id = 'rusun-weton', keahlian = 6, keahlian6_sejak = ${new Date(T0.getTime() - hari(29))} where id = ${id}`
-  const k = await muat(sql, id, sesudah(SIKLUS_MS))
+  const k = await muatKenyang(id, sesudah(SIKLUS_MS))
   assert.equal(k.hunian?.id, 'kost-melati')
   assert.equal(k.kas, MODAL_AWAL - rincianTagihan(hunianById('rusun-weton')!).total) // siklus itu masih tarif Rusunawa
 })
@@ -242,12 +265,12 @@ uji('kerja: upah, Tenaga, dan pemulihan tanpa kehilangan sisa waktu', async () =
   assert.equal(k.kas, MODAL_AWAL + upahKuli(10))
   await galat('tenaga_kurang', kerja(sql, id, kunci(), 1, T0))
   for (const salah of [0, 11, 1.5]) await galat('aksi_tidak_valid', kerja(sql, id, kunci(), salah, T0))
-  k = await muat(sql, id, sesudah(3 * TENAGA_SELANG_MS + 100_000))
+  k = await muatKenyang(id, sesudah(3 * TENAGA_SELANG_MS + 100_000))
   assert.equal(k.tenaga.nilai, 3)
   assert.equal(Date.parse(k.tenaga.pada), T0.getTime() + 3 * TENAGA_SELANG_MS) // jam pulih maju tepat 3 selang
-  k = await muat(sql, id, sesudah(jam(1)))
+  k = await muatKenyang(id, sesudah(jam(1)))
   assert.equal(k.tenaga.nilai, 10)
-  k = await muat(sql, id, sesudah(jam(30)))
+  k = await muatKenyang(id, sesudah(jam(30)))
   assert.equal(k.tenaga.nilai, TENAGA.maks)
   const lain = await mulai(await baru())
   await galat('belum_punya_kerja', kerja(sql, lain, kunci(), 1, T0))
@@ -307,6 +330,63 @@ uji('kamar: kuota per gedung dijaga, termasuk saat dua pemain berebut kamar tera
   assert.equal(kw.hunian?.tempat, null)
 })
 
+uji('Rusunawa: bila semua gedung penuh, pendatang tetap dapat kamar tambahan; gedung yang diminta tetap dijaga kuotanya', async () => {
+  const gedung = penempatan.filter((p) => p.jenis === 'rusun-weton').map((p) => p.id)
+  if (!gedung.length) return console.log('         (dilewati: tata letak aktif tidak punya Rusunawa)')
+  const h = hunianById('rusun-weton')!
+  const susulan = new Date(T0.getTime() + SIKLUS_MS)
+  for (const g of gedung) {
+    await sql`delete from warga where hunian_tempat = ${g} or hunian_tempat_berikut = ${g}`
+    await sql`
+      insert into warga (email, nama, sandi_hash, dibuat_pada, terakhir_aktif, tenaga, tenaga_pada, tagihan_berikut, hunian_id, hunian_tempat, hunian_kamar)
+      select 'rusun' || g || '-' || ${g} || '@uji.weton', 'Dummy', 'x', ${T0}, ${T0}, 100, ${T0}, ${susulan}, 'rusun-weton', ${g}, (g + 1) / 2
+      from generate_series(1, ${kapasitasHunian(h)!}::int) g`
+  }
+  await galat('hunian_penuh', pilihHunian(sql, await baru(), kunci(), 'rusun-weton', T0, gedung[0]))
+  const a = await pilihHunian(sql, await baru(), kunci(), 'rusun-weton', T0)
+  assert.ok(a.hunian?.tempat && gedung.includes(a.hunian.tempat))
+  assert.equal(a.hunian?.kamar, h.kamar! + 1)
+  // pendatang berikutnya disebar ke gedung tersepi, dan kamar tambahan tetap berisi paling banyak dua warga
+  const lain = [a]
+  for (let i = 0; i < 5; i++) lain.push(await pilihHunian(sql, await baru(), kunci(), 'rusun-weton', T0))
+  const isi = new Map<string, number>()
+  for (const x of lain) {
+    assert.ok(x.hunian!.kamar! > h.kamar!)
+    const kunciK = `${x.hunian!.tempat}|${x.hunian!.kamar}`
+    isi.set(kunciK, (isi.get(kunciK) ?? 0) + 1)
+  }
+  assert.ok([...isi.values()].every((n) => n <= h.penghuni))
+})
+
+uji('kuli angkut: lowongan tanpa batas, pendatang selalu bisa bekerja', async () => {
+  const gudang = penempatan.filter((p) => p.jenis === 'gudang-pelabuhan').map((p) => p.id)
+  if (!gudang.length) return console.log('         (dilewati: tata letak aktif tidak punya Gudang Pelabuhan)')
+  await sql`
+    insert into warga (email, nama, sandi_hash, dibuat_pada, terakhir_aktif, tenaga, tenaga_pada, tagihan_berikut, hunian_id, pekerjaan_id, tempat_kerja)
+    select 'kuli' || g || '-' || t || '@uji.weton', 'Dummy', 'x', ${T0}, ${T0}, 100, ${T0}, ${sesudah(SIKLUS_MS)}, 'kost-melati', 'kuli-angkut', t
+    from generate_series(1, 50) g, unnest(${gudang}::text[]) t`
+  const id = await mulai(await baru())
+  const k = await ambilPekerjaan(sql, id, kunci(), 'kuli-angkut', T0)
+  assert.equal(k.pekerjaan?.id, 'kuli-angkut')
+})
+
+uji('lapar: pemain yang lama pergi dirawat selagi pergi, ditagih sekali, dan tidak terkunci saat kembali', async () => {
+  const id = await mulai(await baru())
+  await suntik(id, 2_000_000, T0)
+  const t = sesudah(hari(3))
+  let k = await muat(sql, id, t)
+  assert.equal(k.dirawat, null)
+  const rawat = (await jenisLedger(id)).filter((l) => l.jenis === 'rawat_inap')
+  assert.equal(rawat.length, 1)
+  // muat lagi pada saat yang sama tidak menagih lagi, dan pemain langsung bisa beraksi
+  const kas = k.kas
+  k = await muat(sql, id, t)
+  assert.equal(k.kas, kas)
+  k = await klaimBonus(sql, id, kunci(), t)
+  assert.equal(k.kas, kas + BONUS_HARIAN)
+  assert.equal((await jenisLedger(id)).filter((l) => l.jenis === 'rawat_inap').length, 1)
+})
+
 // ---------------------------------------------------------------- kursus, bonus
 
 uji('kursus: biaya, diskon hunian, Tenaga, uang, dan Keahlian 6', async () => {
@@ -314,11 +394,23 @@ uji('kursus: biaya, diskon hunian, Tenaga, uang, dan Keahlian 6', async () => {
   const mawar = hunianById('kost-mawar')
   assert.equal(biayaKursus(1, mawar), 90_000)
   let k = await kursus(sql, id, kunci(), T0)
-  assert.equal(k.keahlian, 2)
+  // kursus berjalan selama durasinya: Keahlian naik saat selesai, lalu ada masa jeda
+  assert.equal(k.keahlian, 1)
+  assert.equal(k.latihan?.target, 2)
   assert.equal(k.kas, MODAL_AWAL - 90_000)
   assert.equal(k.tenaga.nilai, TENAGA.maks - TENAGA.kursus)
+  await galat('latihan_berjalan', kursus(sql, id, kunci(), T0))
+  const selesai = new Date(Date.parse(k.latihan!.selesai))
+  k = await muatKenyang(id, selesai)
+  assert.equal(k.keahlian, 2)
+  assert.equal(k.latihan, null)
+  await galat('latihan_jeda', kursus(sql, id, kunci(), selesai))
+  k = await kursus(sql, id, kunci(), new Date(selesai.getTime() + LATIHAN.cooldownMs + 1000)) // Keahlian 3: atribut awal 5 cukup
+  const t4 = new Date(Date.parse(k.latihan!.selesai) + LATIHAN.cooldownMs + 1000)
+  await kenyang(id, t4)
+  await galat('stat_kurang', kursus(sql, id, kunci(), t4)) // Keahlian 4 butuh Kecerdasan dan Disiplin 6
   await suntik(id, 5_000_000, T0)
-  for (let i = 0; i < 4; i++) k = await kursus(sql, id, kunci(), T0)
+  k = (await naikKeahlian(id, 6, t4)).k
   assert.equal(k.keahlian, 6)
   assert.ok((await baris(id)).keahlian6_sejak)
 
@@ -333,11 +425,10 @@ uji('kursus: biaya, diskon hunian, Tenaga, uang, dan Keahlian 6', async () => {
 
   const maks = await mulai(await baru())
   await suntik(maks, 30_000_000, T0)
-  let km = await muat(sql, maks, T0)
-  for (let i = 0; i < 9; i++) km = await kursus(sql, maks, kunci(), T0)
+  const { k: km, t: tm } = await naikKeahlian(maks, 10, T0)
   assert.equal(km.keahlian, 10)
   assert.equal(km.kursus, null)
-  await galat('keahlian_maks', kursus(sql, maks, kunci(), T0))
+  await galat('keahlian_maks', kursus(sql, maks, kunci(), tm))
 })
 
 uji('bonus harian: sekali per tanggal WIB, tengah malam WIB membuka lagi', async () => {
@@ -358,16 +449,16 @@ uji('tagihan: sewa, listrik, dan makan jatuh tempo setelah 7 hari, tidak ditagih
   await kerja(sql, id, kunci(), 5, T0)
   const t = rincianTagihan(hunianById('kost-melati')!).total
   assert.equal(t, 450_000 + 60_000 + 750_000) // sewa, listrik, makan 30 hari pada UMK awal
-  let k = await muat(sql, id, sesudah(SIKLUS_MS - 1000)) // belum jatuh tempo
+  let k = await muatKenyang(id, sesudah(SIKLUS_MS - 1000)) // belum jatuh tempo
   assert.equal(k.kas, MODAL_AWAL + upahKuli(5))
   await suntik(id, 1_000_000, sesudah(SIKLUS_MS - 500))
-  k = await muat(sql, id, sesudah(SIKLUS_MS)) // tepat jatuh tempo
+  k = await muatKenyang(id, sesudah(SIKLUS_MS)) // tepat jatuh tempo
   assert.equal(k.kas, MODAL_AWAL + 1_000_000 + upahKuli(5) - t)
   assert.equal(k.kasbon, 0)
   assert.equal(Date.parse(k.tagihan!.jatuhTempo), T0.getTime() + 2 * SIKLUS_MS)
   assert.equal(k.upahSiklus, 0)
   assert.deepEqual((await jenisLedger(id)).map((l) => l.jenis), ['uang_saku', 'upah', 'bonus_harian', 'tagihan_hidup'])
-  k = await muat(sql, id, sesudah(SIKLUS_MS))
+  k = await muatKenyang(id, sesudah(SIKLUS_MS))
   assert.equal(k.kas, MODAL_AWAL + 1_000_000 + upahKuli(5) - t)
 })
 
@@ -375,7 +466,7 @@ uji('pajak penghasilan bertingkat atas upah siklus', async () => {
   const id = await mulai(await baru())
   await suntik(id, 2_000_000, T0)
   await sql`update warga set upah_siklus = 6000000 where id = ${id}`
-  const k = await muat(sql, id, sesudah(SIKLUS_MS))
+  const k = await muatKenyang(id, sesudah(SIKLUS_MS))
   assert.equal(pajakBulanan(4_500_000), 0)
   assert.equal(pajakBulanan(6_000_000), 75_000)
   assert.equal(pajakBulanan(12_000_000), 275_000 + 300_000)
@@ -387,7 +478,7 @@ uji('kasbon: selisih tagihan, bunga 10%, macet memperlambat Tenaga, lalu dilunas
   const id = await mulai(await baru())
   const t = rincianTagihan(hunianById('kost-melati')!).total
   await suntik(id, -950_000, T0) // sisa Rp 50.000
-  let k = await muat(sql, id, sesudah(SIKLUS_MS))
+  let k = await muatKenyang(id, sesudah(SIKLUS_MS))
   assert.equal(k.kas, 0)
   const awal = t - 50_000
   assert.equal(k.kasbon, awal)
@@ -396,7 +487,7 @@ uji('kasbon: selisih tagihan, bunga 10%, macet memperlambat Tenaga, lalu dilunas
   assert.equal(k.tenaga.selangMs, TENAGA_SELANG_MS)
 
   const t2 = sesudah(2 * SIKLUS_MS + 1000)
-  k = await muat(sql, id, t2) // bunga 10%, lalu tagihan seluruhnya menjadi kasbon
+  k = await muatKenyang(id, t2) // bunga 10%, lalu tagihan seluruhnya menjadi kasbon
   const total = awal + Math.round(awal * 0.1) + t
   assert.equal(k.kasbon, total)
   assert.equal(k.kasbonMacet, true)
@@ -418,12 +509,12 @@ uji('kasbon: selisih tagihan, bunga 10%, macet memperlambat Tenaga, lalu dilunas
 uji('mudik: pemain yang lama pergi hanya ditagih 2 siklus', async () => {
   const id = await mulai(await baru())
   await suntik(id, 10_000_000, T0)
-  const k = await muat(sql, id, sesudah(hari(30)))
+  const k = await muatKenyang(id, sesudah(hari(30)))
   assert.equal(k.kas, MODAL_AWAL + 10_000_000 - 2 * rincianTagihan(hunianById('kost-melati')!).total)
   assert.equal(k.kasbon, 0)
   assert.equal((await jenisLedger(id)).filter((l) => l.jenis === 'tagihan_hidup').length, 2)
   assert.ok(Date.parse(k.tagihan!.jatuhTempo) > sesudah(hari(30)).getTime())
-  const k2 = await muat(sql, id, sesudah(hari(31)))
+  const k2 = await muatKenyang(id, sesudah(hari(31)))
   assert.equal(k2.kas, k.kas)
 })
 
@@ -433,11 +524,11 @@ uji('pindah hunian berlaku mulai siklus berikutnya', async () => {
   await pilihHunian(sql, id, kunci(), 'kost-mawar', T0)
   const melati = rincianTagihan(hunianById('kost-melati')!).total
   const mawar = rincianTagihan(hunianById('kost-mawar')!).total
-  let k = await muat(sql, id, sesudah(SIKLUS_MS)) // siklus pertama masih tarif Melati
+  let k = await muatKenyang(id, sesudah(SIKLUS_MS)) // siklus pertama masih tarif Melati
   assert.equal(k.kas, MODAL_AWAL + 5_000_000 - melati)
   assert.equal(k.hunian?.id, 'kost-mawar')
   assert.equal(k.hunianBerikut, null)
-  k = await muat(sql, id, sesudah(2 * SIKLUS_MS)) // siklus kedua tarif Mawar
+  k = await muatKenyang(id, sesudah(2 * SIKLUS_MS)) // siklus kedua tarif Mawar
   assert.equal(k.kas, MODAL_AWAL + 5_000_000 - melati - mawar)
 })
 
@@ -522,24 +613,20 @@ uji('walikota: rumah dinas tanpa tagihan, Tenaga besar, dana lewat ledger, hanya
 // ---------------------------------------------------------------- kesetaraan dengan simulasi ekonomi
 
 /**
- * Pemain santai satu sesi per hari, kebijakan sama dengan scripts/sim-ekonomi.ts: bonus, kursus selama kas aman,
- * pekerjaan Tier tertinggi yang boleh, lalu habiskan Tenaga untuk bekerja. Bertindak pada t0 + d hari - 1 menit,
- * lalu memuat keadaan 30 menit setelah hari ke-d agar tagihan yang jatuh tempo ikut selesai sebelum dibandingkan.
+ * Pemain santai satu sesi per hari, kebijakan sama dengan scripts/sim-ekonomi.ts (`kursus: false`): bonus, pekerjaan Tier
+ * tertinggi yang boleh, lalu habiskan Tenaga untuk bekerja. Bertindak pada t0 + d hari - 1 menit, lalu memuat keadaan
+ * 30 menit setelah hari ke-d agar tagihan yang jatuh tempo ikut selesai sebelum dibandingkan. Simulasi tidak memodelkan
+ * lapar dan kursus berdurasi, jadi bot selalu kenyang dan tidak ikut kursus; yang dibandingkan adalah inti ekonomi:
+ * upah, bonus, tagihan, pajak, dan kasbon.
  */
 async function jalankanBot(hunianId: string, jumlahHari: number): Promise<number[]> {
   const id = await mulai(await baru(), hunianId)
-  const tagihan = rincianTagihan(hunianById(hunianId)!).total
   const kasPerHari: number[] = []
   for (let d = 1; d <= jumlahHari; d++) {
     const t = new Date(T0.getTime() + d * HARI_MS - 60_000)
+    await kenyang(id, t)
     await klaimBonus(sql, id, kunci(), t)
     let k = await muat(sql, id, t)
-    for (;;) {
-      if (!k.kursus || k.tenaga.nilai < TENAGA.kursus) break
-      const aman = k.keahlian < 6 ? tagihan : tagihan * 3
-      if (k.kas - k.kursus.biaya < aman) break
-      k = await kursus(sql, id, kunci(), t)
-    }
     const terbaik = k.lowongan.filter((l) => l.boleh).reduce((m, l) => (l.tier > m.tier ? l : m))
     if (k.pekerjaan?.tier !== terbaik.tier) k = await ambilPekerjaan(sql, id, kunci(), terbaik.id, t)
     let sisa = Math.floor(k.tenaga.nilai / TENAGA.aksiKerja)
@@ -548,7 +635,7 @@ async function jalankanBot(hunianId: string, jumlahHari: number): Promise<number
       k = await kerja(sql, id, kunci(), n, t)
       sisa -= n
     }
-    k = await muat(sql, id, new Date(T0.getTime() + d * HARI_MS + menit(30)))
+    k = await muatKenyang(id, new Date(T0.getTime() + d * HARI_MS + menit(30)))
     kasPerHari.push(k.kas)
   }
   return kasPerHari
@@ -556,7 +643,7 @@ async function jalankanBot(hunianId: string, jumlahHari: number): Promise<number
 
 for (const hid of ['kost-melati', 'kost-mawar', 'kost-anggrek']) {
   uji(`kesetaraan: server dan simulasi memberi kas yang sama tiap hari (${hid}, 60 hari)`, async () => {
-    const sim = simulasi({ sesi: 1, hunianId: hid }, 60).kasHarian
+    const sim = simulasi({ sesi: 1, hunianId: hid, kursus: false }, 60).kasHarian
     const bot = await jalankanBot(hid, 60)
     for (let d = 0; d < 60; d++) assert.equal(bot[d], sim[d], `${hid} hari ${d + 1}: server ${bot[d]}, simulasi ${sim[d]}`)
   })
@@ -671,9 +758,15 @@ uji('lahan: beli, tidak bisa dibeli dua warga, bangun rumah, lalu pindah ke ruma
   await galat('lahan_terjual', lahan(sql, b, kunci(), 'beli', l.id, T0))
   await galat('bukan_milik', lahan(sql, b, kunci(), 'rumah', l.id, T0))
   k = await lahan(sql, a, kunci(), 'rumah', l.id, T0)
-  assert.equal(k.punyaRumah, true)
+  // konstruksi butuh waktu: rumah belum bisa ditinggali sampai selesai
+  assert.equal(k.punyaRumah, false)
+  assert.equal(k.lahan[0].bangun?.jenis, 'rumah')
   await galat('rumah_ada', lahan(sql, a, kunci(), 'rumah', l.id, T0))
-  k = await pilihHunian(sql, a, kunci(), 'rumah-sendiri', T0)
+  await galat('belum_punya_rumah', pilihHunian(sql, a, kunci(), 'rumah-sendiri', T0))
+  const jadi = new Date(Date.parse(k.lahan[0].bangun!.selesai) + 1000)
+  k = await muatKenyang(a, jadi)
+  assert.equal(k.punyaRumah, true)
+  k = await pilihHunian(sql, a, kunci(), 'rumah-sendiri', jadi)
   assert.equal(k.hunianBerikut?.id, 'rumah-sendiri')
 })
 
@@ -1128,9 +1221,15 @@ uji('invarian: kas dan kasbon sama dengan jumlah ledger, dan saldo_setelah baris
 // ---------------------------------------------------------------- jalankan
 
 let gagal = 0
+let jalan = 0
 try {
   await jalankanMigrasi(sql, 'db/migrasi')
+  // hadiah peringkat mingguan jatuh ke warga uji mana pun yang kebetulan teratas dan mencemari angka kas uji lain;
+  // pekan yang "sudah ditutup" sampai jauh ke depan mematikannya untuk seluruh jalan uji
+  await sql`update kota set minggu_peringkat = '9999-12-31' where id = 1`
   for (const u of daftarUji) {
+    if (process.env.SARING && !u.nama.includes(process.env.SARING)) continue
+    jalan++
     try {
       await u.fn()
       console.log(`  ok     ${u.nama}`)
@@ -1145,5 +1244,5 @@ try {
   await admin.unsafe(`drop schema ${skema} cascade`)
   await admin.end()
 }
-console.log(gagal ? `\n${gagal} dari ${daftarUji.length} uji gagal` : `\nOK, ${daftarUji.length} uji lolos`)
+console.log(gagal ? `\n${gagal} dari ${jalan} uji gagal` : `\nOK, ${jalan} uji lolos`)
 process.exit(gagal ? 1 : 0)

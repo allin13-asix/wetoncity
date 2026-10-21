@@ -1,11 +1,11 @@
 import { Galat } from '@/server/galat'
 import { infoPancing, pancing } from '@/server/hiburan'
-import { aksi, galatKeJawaban, jawab } from '@/server/http'
+import { aksi, galatKeJawaban, jawabPublik } from '@/server/http'
 import { sql } from '@/server/sql'
 
 export async function GET() {
   try {
-    return jawab(infoPancing())
+    return jawabPublik(infoPancing(), 3600)
   } catch (e) {
     return galatKeJawaban(e)
   }

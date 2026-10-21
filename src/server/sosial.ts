@@ -8,9 +8,10 @@ import type { Warga } from './tipe.ts'
 /**
  * Pilih nomor kamar di bangunan `tempat`: yang diminta bila masih ada tempat, selain itu kamar kosong pertama, lalu kamar
  * pertama yang masih punya tempat. Penghuni yang sudah dijadwalkan pindah ke sini ikut dihitung. Pemanggil memegang
- * kunci penasihat bangunan.
+ * kunci penasihat bangunan. `luber`: bila semua kamar penuh, pakai kamar tambahan bernomor sesudah `jumlahKamar`
+ * (Rusunawa, lihat pilihHunian).
  */
-export async function tentukanKamar(tx: Tx, tempat: string, jumlahKamar: number, perKamar: number, kecuali: string, diminta?: number | null): Promise<number> {
+export async function tentukanKamar(tx: Tx, tempat: string, jumlahKamar: number, perKamar: number, kecuali: string, diminta?: number | null, luber = false): Promise<number> {
   const baris = await tx<{ kamar: number; n: number }[]>`
     select kamar, count(*)::int as n from (
       select hunian_kamar as kamar from warga where id <> ${kecuali} and peran <> 'walikota' and hunian_tempat = ${tempat} and hunian_kamar is not null
@@ -25,6 +26,7 @@ export async function tentukanKamar(tx: Tx, tempat: string, jumlahKamar: number,
   }
   for (let k = 1; k <= jumlahKamar; k++) if (!isi.get(k)) return k
   for (let k = 1; k <= jumlahKamar; k++) if ((isi.get(k) ?? 0) < perKamar) return k
+  if (luber) for (let k = jumlahKamar + 1; ; k++) if ((isi.get(k) ?? 0) < perKamar) return k
   throw new Galat('hunian_penuh', 'Semua kamar di gedung ini sudah terisi.', 409)
 }
 

@@ -216,15 +216,20 @@ type Prabaca = {
   cair: boolean
 }
 
-/** Dirawat otomatis: kesehatan sudah di batas minimum dan masih lapar. Biaya jadi kasbon bila kas kurang. */
-async function rawatInap(tx: Tx, w: Warga, now: Date): Promise<void> {
+/**
+ * Dirawat otomatis: kesehatan sudah di batas minimum dan masih lapar. Biaya jadi kasbon bila kas kurang.
+ * Masa rawat dihitung dari `mulai` (saat ia seharusnya dirawat), jadi pemain yang lama tidak membuka game dan sudah
+ * "keluar dari rumah sakit" selagi pergi tidak dikunci lagi saat kembali; ia hanya menanggung biayanya.
+ */
+async function rawatInap(tx: Tx, w: Warga, mulai: Date, now: Date): Promise<void> {
   await bayarAtauKasbon(tx, w, 'rawat_inap', LAPAR.rawat.biaya, { sebab: 'lapar berkepanjangan' }, now)
   w.lapar = LAPAR.rawat.laparPulih
   w.kesehatan = Math.max(w.kesehatan, LAPAR.rawat.kesehatanPulih)
   w.kesehatan_pada = now
-  w.rawat_sampai = new Date(now.getTime() + LAPAR.rawat.durasiMs)
-  // lapar tidak turun selama dirawat
-  w.lapar_pada = w.rawat_sampai
+  w.rawat_sampai = new Date(mulai.getTime() + LAPAR.rawat.durasiMs)
+  // lapar tidak turun selama dirawat; bila masa rawat sudah lewat, jam lapar mulai dari sekarang (bukan dari masa lalu,
+  // yang akan membuat pemain langsung lapar lagi dan ditagih rawat inap berulang tiap kali keadaan dimuat)
+  w.lapar_pada = new Date(Math.max(w.rawat_sampai.getTime(), now.getTime()))
   w.lapar_hukum_pada = null
 }
 
@@ -278,7 +283,7 @@ async function selesaikan(tx: Tx, w: Warga, now: Date, pra: Prabaca): Promise<vo
   const mulaiLapar = waktuMulaiLapar(w)
   if (w.rawat_sampai && w.rawat_sampai <= now) w.rawat_sampai = null
   const perluRawat = hitungLapar(w, now)
-  if (perluRawat && !w.rawat_sampai) await rawatInap(tx, w, now)
+  if (perluRawat && !w.rawat_sampai) await rawatInap(tx, w, perluRawat, now)
 
   const macet = kasbonMacet(w.kasbon, w.kasbon_sejak, now)
   const maks = tenagaMaks(w.hunian_id, w.peran)
@@ -607,19 +612,26 @@ export const pilihHunian = (sql: Sql, id: string, kunci: string, hunianId: strin
       const calon = tempatDiminta ? [tempatDiminta] : penempatan.filter((p) => h.bangunan.includes(p.jenis)).map((p) => p.id)
       if (tempatDiminta && !h.bangunan.includes(penempatanById.get(tempatDiminta)?.jenis ?? '')) throw new Galat('tempat_tidak_cocok', 'Bangunan itu bukan ' + h.nama + '.')
       if (!calon.length) throw new Galat('hunian_tidak_ada', h.nama + ' belum ada di peta.')
+      // Rusunawa adalah pintu masuk pendatang: bila semua gedungnya penuh, kamar tambahan dibuka di gedung tersepi,
+      // jadi pemain baru selalu bisa mulai bermain berapa pun jumlah warga kota.
+      const luber = h.id === RUSUN.id && !tempatDiminta
+      let tersepi: { c: string; n: number } | null = null
       for (const c of calon) {
         if (c === w.hunian_tempat && h.id === w.hunian_id) { tempat = c; break }
         // dua pemain tidak bisa merebut kamar terakhir bersamaan
         await tx`select pg_advisory_xact_lock(hashtext(${'hunian:' + c}))`
-        if ((await terisi(tx, c, w.id)) < kapasitas) { tempat = c; break }
+        const n = await terisi(tx, c, w.id)
+        if (n < kapasitas) { tempat = c; break }
+        if (!tersepi || n < tersepi.n) tersepi = { c, n }
       }
+      if (!tempat && luber && tersepi) tempat = tersepi.c
       if (!tempat) throw new Galat('hunian_penuh', tempatDiminta ? 'Semua kamar di gedung ini sudah terisi. Coba gedung lain.' : 'Semua kamar ' + h.nama + ' sudah terisi.', 409)
       // nomor kamar: tetap di kamar sekarang bila masih di gedung yang sama, selain itu yang diminta atau kamar kosong pertama
       if (h.kamar) {
         if (tempat === w.hunian_tempat && h.id === w.hunian_id && kamarDiminta == null && w.hunian_kamar != null) kamar = w.hunian_kamar
         else {
           await tx`select pg_advisory_xact_lock(hashtext(${'hunian:' + tempat}))`
-          kamar = await tentukanKamar(tx, tempat, h.kamar, h.penghuni, w.id, kamarDiminta)
+          kamar = await tentukanKamar(tx, tempat, h.kamar, h.penghuni, w.id, kamarDiminta, luber)
         }
       }
     }

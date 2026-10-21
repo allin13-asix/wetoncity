@@ -359,7 +359,7 @@ type DataPekerja = {
   selesai: string | null
   npc: Array<{ id: string; nama: string; peran: string }>
   pemain: Array<{ id: string; nama: string; level: number; pekerjaan: string }>
-  lowongan: Array<{ id: string; nama: string; tier: number; kuota: number; terisi: number; sisa: number; terbuka: boolean; seleksi: string | null; minKeahlian: number }>
+  lowongan: Array<{ id: string; nama: string; tier: number; kuota: number | null; terisi: number; sisa: number | null; terbuka: boolean; seleksi: string | null; minKeahlian: number }>
 }
 
 /** Daftar pekerja bangunan (NPC dan pemain, pemain dengan tombol kunjungi profil) dan lowongan beserta kuota. */
@@ -380,10 +380,12 @@ export function PekerjaBangunan({ tempat, versi }: { tempat: string; versi: numb
               <span>
                 <strong>{l.nama}</strong>
                 <small>
-                  {l.terisi} dari {l.kuota} kursi pemain terisi{l.seleksi ? `, lewat ${l.seleksi}` : ''}
+                  {/* kuota null = tanpa batas (Infinity tidak bisa dikirim lewat JSON) */}
+                  {l.kuota === null ? `${l.terisi} pemain bekerja di sini, selalu menerima` : `${l.terisi} dari ${l.kuota} kursi pemain terisi`}
+                  {l.seleksi ? `, lewat ${l.seleksi}` : ''}
                 </small>
               </span>
-              <span className={`chip ${l.terbuka ? 'chip-bicara' : 'chip-netral'}`}>{l.terbuka ? `Dibuka (${l.sisa})` : 'Penuh'}</span>
+              <span className={`chip ${l.terbuka ? 'chip-bicara' : 'chip-netral'}`}>{l.terbuka ? (l.sisa === null ? 'Dibuka' : `Dibuka (${l.sisa})`) : 'Penuh'}</span>
             </li>
           ))}
         </ul>

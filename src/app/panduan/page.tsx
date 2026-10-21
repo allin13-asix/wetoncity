@@ -55,7 +55,7 @@ function TabelKerja({ daftar }: { daftar: Pekerjaan[] }) {
 
 const utama = katalog.filter((j) => j.utama && !j.diLaut)
 const pilihanAwal = hunian.filter((h) => h.fase === 0)
-const batas = Math.max(...pilihanAwal.map(biayaBulan)) * 1.08
+const batas = Math.max(penghasilanAwal, ...pilihanAwal.map(biayaBulan)) * 1.08
 
 export default function Page() {
   return (

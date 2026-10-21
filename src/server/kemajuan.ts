@@ -38,10 +38,14 @@ async function tutupPekan(sql: Sql, now: Date, pekan: string): Promise<void> {
   await sql.begin(async (conn) => {
     const q = bungkus(conn)
     // jangan menunggu kunci baris tanpa batas: koneksi (kolam Vercel hanya satu) harus segera bebas
-    await q.mentah("set local lock_timeout = '3s'")
-    await q.mentah("set local statement_timeout = '10s'")
-    const [k] = await q<{ minggu_peringkat: string | null }[]>`select minggu_peringkat from kota where id = 1 for update`
-    if (!k || k.minggu_peringkat === pekan) return
+    // satu penerbangan: dijalankan server sesuai urutan kirim, jadi batas waktu sudah berlaku saat baris kota dikunci
+    const [, , [k]] = await Promise.all([
+      q.mentah("set local lock_timeout = '3s'"),
+      q.mentah("set local statement_timeout = '10s'"),
+      q<{ minggu_peringkat: string | null }[]>`select minggu_peringkat from kota where id = 1 for update`,
+    ])
+    // pekan hanya maju: jam proses yang tertinggal (atau waktu uji yang mundur) tidak boleh menutup pekan yang sudah ditutup
+    if (!k || (k.minggu_peringkat !== null && k.minggu_peringkat >= pekan)) return
     if (k.minggu_peringkat) {
       const teratas = await q<{ id: string; nama: string; poin: number }[]>`
         select id, nama, reputasi_minggu as poin from warga

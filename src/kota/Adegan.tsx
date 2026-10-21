@@ -1,7 +1,8 @@
 'use client'
 
+import { PerformanceMonitor } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { Color, Vector3, type DirectionalLight, type HemisphereLight } from 'three'
 import { Hiasan } from './Hiasan'
 import { Isi } from './Isi'
@@ -52,9 +53,22 @@ type Props = {
   putar: number
 }
 
-export default function Adegan({ terpilih, onPilih, waktu, fokus, putar }: Props) {
+const DPR_MAKS = 1.75
+
+/**
+ * memo: HUD di atasnya berdetak tiap detik (Tenaga berjalan). Tanpa memo seluruh isi kota ikut direkonsiliasi tiap detik,
+ * yang terasa sebagai patah-patah di ponsel. Resolusi turun sendiri bila FPS perangkat tidak sanggup, lalu naik lagi bila lega.
+ */
+export default memo(function Adegan({ terpilih, onPilih, waktu, fokus, putar }: Props) {
+  const [dpr, setDpr] = useState(() => Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1, DPR_MAKS))
   return (
-    <Canvas orthographic dpr={[1, 1.75]} gl={{ antialias: true, powerPreference: 'high-performance' }} onPointerMissed={() => onPilih(null)}>
+    <Canvas orthographic dpr={dpr} gl={{ antialias: true, powerPreference: 'high-performance' }} onPointerMissed={() => onPilih(null)}>
+      <PerformanceMonitor
+        flipflops={3}
+        onDecline={() => setDpr((d) => Math.max(1, Math.round((d - 0.25) * 100) / 100))}
+        onIncline={() => setDpr((d) => Math.min(DPR_MAKS, window.devicePixelRatio || 1, Math.round((d + 0.25) * 100) / 100))}
+        onFallback={() => setDpr(1)}
+      />
       <Cahaya waktu={waktu} />
       <Kamera fokus={fokus} putar={putar} />
       <Tanah waktu={waktu} />
@@ -62,4 +76,4 @@ export default function Adegan({ terpilih, onPilih, waktu, fokus, putar }: Props
       <Hiasan waktu={waktu} />
     </Canvas>
   )
-}
+})

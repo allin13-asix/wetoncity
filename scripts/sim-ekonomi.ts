@@ -18,6 +18,8 @@ type Pemain = {
   sesi: 1 | 2
   hunianId: string
   kuliah?: { jurusanId: string; mulaiHari: number }
+  /** false: tidak ikut kursus sama sekali (uji kesetaraan server; kursus di server kini berdurasi dan bersyarat atribut) */
+  kursus?: boolean
 }
 type Hasil = ReturnType<typeof simulasi>
 
@@ -82,7 +84,7 @@ export function simulasi(p: Pemain, hari: number) {
     }
 
     // kursus: sampai level 6 selama kas aman, sesudahnya hanya bila kas longgar (3 kali tagihan)
-    while (skill < KURSUS.skillMaks && t >= TENAGA.kursus) {
+    while (p.kursus !== false && skill < KURSUS.skillMaks && t >= TENAGA.kursus) {
       const biaya = bulatRibu(kursusBiaya(skill) * (1 - h.kursusDiskon))
       const aman = skill < 6 ? tagihan : tagihan * 3
       if (kas - biaya < aman) break
