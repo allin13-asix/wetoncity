@@ -189,6 +189,16 @@ a, button, summary, select, input, label { touch-action: manipulation; -webkit-t
   .lembar-tur .titik li.aktif { width: 18px; }
   .lembar-tur .tombol-baris { gap: 8px; }
   .lembar-tur .tombol-baris button { min-height: 44px; flex: 1 1 0; }
+
+  /* kepala Beranda: judul di atas, dua tombol selebar isinya di bawahnya (bukan satu tombol melebar sendiri) */
+  .beranda-kepala { flex-wrap: wrap; }
+  .beranda-kepala .baris-aksi { flex-wrap: nowrap; }
+  .beranda-kepala .baris-aksi > * { flex: none; }
+
+  /* tab kelompok (Pasar dan lainnya): satu baris yang bisa digeser, bukan dua baris yang patah tidak rata */
+  .kelompok-tab { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .kelompok-tab::-webkit-scrollbar { display: none; }
+  .kelompok-tab button { flex: none; min-height: 44px; }
 }
 @media (max-width: 760px) and (max-height: 680px) {
   .hud-bawah .lembar.lembar-tur { max-height: 52dvh; }

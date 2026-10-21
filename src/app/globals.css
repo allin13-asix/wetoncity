@@ -144,6 +144,7 @@ body {
   margin: 4px 0 2px; font-family: var(--tampil); font-weight: 800; font-variation-settings: 'wdth' 85; font-size: 24px; line-height: 1.1;
 }
 .ringkas { margin: 0; color: var(--redup); font-size: 15px; }
+.lembar-isi > .ringkas { margin: 0 0 10px; }
 .lembar-isi { overflow: auto; padding: 4px 16px 16px; overscroll-behavior: contain; }
 .lembar-isi h3 { margin: 18px 0 6px; font-size: 14px; font-weight: 700; color: var(--redup); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -299,9 +300,9 @@ body {
 .fasilitas .tautan { flex: none; margin-top: 2px; font-size: 14px; }
 
 .saring { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 22px 0 16px; }
-.saring label { display: grid; gap: 2px; font-size: 13px; font-weight: 700; color: var(--redup); }
+.saring label { display: grid; gap: 2px; flex: 1 1 240px; max-width: 420px; font-size: 13px; font-weight: 700; color: var(--redup); }
 .saring input {
-  width: min(100%, 340px); min-height: 44px; padding: 0 14px; border: 2px solid var(--papan); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit;
+  width: 100%; min-height: 44px; padding: 0 14px; border: 2px solid var(--papan); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit;
 }
 .saring button {
   min-height: 44px; padding: 0 16px; border: 2px solid var(--papan); border-radius: 12px; background: transparent; color: inherit; font-weight: 700; cursor: pointer;
