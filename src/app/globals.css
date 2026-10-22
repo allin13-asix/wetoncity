@@ -97,7 +97,7 @@ body {
 .hud { position: absolute; inset: 0; pointer-events: none; }
 .hud > * { pointer-events: none; }
 .hud-atas, .hud-bawah { position: absolute; left: 12px; right: 12px; }
-.hud-atas { top: calc(12px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: flex-start; }
+.hud-atas { z-index: 2; top: calc(12px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: flex-start; }
 .hud-bawah { bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .hud-atas > *, .hud-bawah > * { pointer-events: auto; }
 
@@ -114,10 +114,18 @@ body {
 .menu-daftar {
   position: absolute; right: 0; top: 52px; min-width: 190px; padding: 6px; display: grid; border-radius: 14px;
   background: var(--kertas); box-shadow: var(--bayangan); border: 1px solid var(--garis);
+  /* di layar pendek menu digulir, tidak memanjang ke bawah navigasi */
+  max-height: calc(100dvh - 84px - env(safe-area-inset-top) - var(--nav-bawah, 0px)); overflow-y: auto; overscroll-behavior: contain;
 }
 .menu-daftar a { padding: 12px 14px; border-radius: 10px; text-decoration: none; font-weight: 600; }
 .menu-daftar a:hover { background: var(--kapur); }
 .menu-daftar a[aria-current='page'] { background: var(--papan); color: #fff; }
+.tombol-pasang {
+  margin-top: 4px; padding: 12px 14px; border: 0; border-radius: 10px; background: var(--bollard); color: #1b1500; font: inherit; font-weight: 700; text-align: left; cursor: pointer;
+}
+.petunjuk-pasang { margin: 10px 0 0; padding-left: 22px; font-size: 15px; line-height: 1.45; }
+.petunjuk-pasang li + li { margin-top: 4px; }
+.menu-daftar .petunjuk-pasang { max-width: 240px; margin: 6px 8px 4px; }
 
 .bilah {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; max-width: 100%;

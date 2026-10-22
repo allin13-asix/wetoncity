@@ -17,6 +17,7 @@ import { useKeadaan } from './keadaan'
 import { lupakanSesi } from './sesi'
 import { koranDibaca } from './penandaKoran'
 import Pengingat from './Pengingat'
+import { TombolPasang } from './Pwa'
 
 const labelLedger: Record<string, string> = {
   uang_saku: 'Uang saku dari kampung', upah: 'Upah kerja', bonus_harian: 'Bonus harian', tagihan_hidup: 'Tagihan sewa, listrik, makan',
@@ -243,6 +244,7 @@ export default function Beranda() {
             </div>
           </section>
           {k.punyaRumah && <Numpang {...p} />}
+          <TombolPasang />
           <Pengingat />
 
           {k.peran === 'walikota' && (

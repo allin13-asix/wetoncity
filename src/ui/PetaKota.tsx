@@ -17,6 +17,7 @@ import PanelBangunan from './PanelBangunan'
 import PanelTur from './PanelTur'
 import { PanelLahan } from './PropertiPanel'
 import { Merek } from './Papan'
+import { TombolPasang } from './Pwa'
 
 const Adegan = dynamic(() => import('@/kota/Adegan'), {
   ssr: false,
@@ -200,6 +201,7 @@ export default function PetaKota() {
                 <Link href="/warga">Warga</Link>
                 <Link href="/panduan">Panduan</Link>
                 {st.masuk !== null && <Link href={st.masuk ? '/beranda' : '/masuk'}>{st.masuk ? 'Beranda dan KTP' : 'Masuk'}</Link>}
+                <TombolPasang ringkas />
               </nav>
             )}
           </div>
