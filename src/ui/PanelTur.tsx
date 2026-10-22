@@ -8,12 +8,14 @@ import { hunian } from '@/data/hunian'
 import { pekerjaanSmaSmk } from '@/data/pekerjaan'
 import { SEKOLAH, type Sekolah } from '@/data/pendidikan'
 import { tur } from '@/data/tur'
+import { golonganPekerjaan } from '@/server/sistem-aturan'
 import { panggil } from './api'
 import { Tutup } from './ikon'
 import { DaftarKarcis, RingkasanHunian, idPertama } from './KartuHunian'
 import type { KeadaanHook } from './keadaan'
 
-const pekerjaanAwal = pekerjaanSmaSmk.filter((p) => p.tier === 1 && p.fase === 0)
+// contoh untuk pengunjung: Tier 1 yang bisa diambil tanpa seleksi PNS, polisi, atau tentara, dan bangunannya ada di peta
+const pekerjaanAwal = pekerjaanSmaSmk.filter((p) => p.tier === 1 && p.fase === 0 && !golonganPekerjaan(p) && idPertama(p.tempat))
 
 type Props = {
   langkah: number
@@ -36,16 +38,20 @@ export default function PanelTur({ langkah, onLangkah, onTutup, onLihat, st }: P
   const [hunianDipilih, setHunianDipilih] = useState<string | null>(k?.hunian?.id ?? null)
   const [kerjaDipilih, setKerjaDipilih] = useState<string | null>(k?.pekerjaan?.id ?? null)
   const [terisi, setTerisi] = useState<Record<string, number> | undefined>()
+  const [penuh, setPenuh] = useState<ReadonlySet<string>>(new Set())
   const [sibuk, setSibuk] = useState(false)
+  const masuk = !!k
 
   useEffect(() => {
     if (l.jenis === 'hunian') panggil<{ terisi: Record<string, number> }>('/api/hunian').then((r) => r.ok && setTerisi(r.data.terisi))
-  }, [l.jenis])
+    if (l.jenis === 'misi' && masuk) panggil<{ penuh: string[] }>('/api/pekerjaan').then((r) => r.ok && setPenuh(new Set(r.data.penuh)))
+  }, [l.jenis, masuk])
 
   const pilihanH = hunian.find((h) => h.id === hunianDipilih)
-  // pemain: lowongan sungguhan (yang cocok dengan sekolah lebih dulu); pengunjung: contoh Tier 1
+  // pemain: hanya lowongan yang bisa langsung diambil (Keahlian cukup, tanpa seleksi, masih ada kursi), yang cocok dengan
+  // sekolah lebih dulu; pengunjung: contoh Tier 1
   const kerja = k
-    ? [...k.lowongan.filter((x) => x.boleh)].sort((a, b) => Number(b.cocok) - Number(a.cocok) || b.tier - a.tier).slice(0, 8).map((x) => ({ id: x.id, nama: x.nama, tempat: x.tempat, upah: x.upahPerAksi, cocok: x.cocok }))
+    ? [...k.lowongan.filter((x) => x.boleh && !x.seleksi && !penuh.has(x.id) && idPertama(x.tempat))].sort((a, b) => Number(b.cocok) - Number(a.cocok) || b.tier - a.tier).slice(0, 8).map((x) => ({ id: x.id, nama: x.nama, tempat: x.tempat, upah: x.upahPerAksi, cocok: x.cocok }))
     : pekerjaanAwal.map((x) => ({ id: x.id, nama: x.nama, tempat: x.tempat, upah: upahPerAksi(1), cocok: false }))
   const pilihanK = kerja.find((x) => x.id === kerjaDipilih)
   const tertahan = (l.jenis === 'sekolah' && !sekolah) || (l.jenis === 'hunian' && !pilihanH) || (l.jenis === 'misi' && !pilihanK)
@@ -81,7 +87,7 @@ export default function PanelTur({ langkah, onLangkah, onTutup, onLihat, st }: P
   }, [l.jenis, k?.hunian?.tempat, onLihat])
 
   return (
-    <section className="lembar lembar-tur" aria-label="Tur kota bersama Mbak Laras">
+    <section className={`lembar lembar-tur${l.jenis === 'sapa' || l.jenis === 'fasilitas' ? '' : ' lembar-pilih'}`} aria-label="Tur kota bersama Mbak Laras">
       <header className="pemandu">
         <span className="avatar" aria-hidden="true">ML</span>
         <div>
