@@ -1,20 +1,12 @@
 'use client'
 
-// HUD karakter di peta, bergaya plang pelabuhan: Tenaga sebagai sel baterai kuning bolder, Kesehatan sebagai batang,
-// uang ringkas, dan Keahlian sebagai lencana level di avatar. Ketuk untuk membuka KTP dan info karakter di Beranda.
+// HUD karakter di peta, bergaya plang pelabuhan: Tenaga sebagai sel baterai kuning bolder, Kesehatan dan Lapar sebagai
+// batang, uang ditulis lengkap, dan Keahlian sebagai lencana level di avatar. Ketuk untuk membuka KTP dan info karakter di Beranda.
 import Link from 'next/link'
 import { rupiah } from '@/data/ekonomi'
+import { sedangLapar } from '@/server/sistem-aturan'
 import { lamaWaktu } from './api'
 import type { KeadaanHook } from './keadaan'
-
-/** "850 rb", "1,2 jt", "3,4 M": muat di layar sempit. */
-export function uangRingkas(n: number): string {
-  const f = (x: number) => x.toLocaleString('id-ID', { maximumFractionDigits: x < 10 ? 1 : 0 })
-  if (Math.abs(n) >= 1e9) return `${f(n / 1e9)} M`
-  if (Math.abs(n) >= 1e6) return `${f(n / 1e6)} jt`
-  if (Math.abs(n) >= 1e3) return `${Math.floor(n / 1e3)} rb`
-  return String(n)
-}
 
 const Petir = () => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -26,6 +18,12 @@ const Palang = () => (
     <path d="M6 2h4v4h4v4h-4v4H6v-4H2V6h4z" fill="currentColor" />
   </svg>
 )
+const Mangkuk = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M1.5 8h13a6.5 6 0 0 1-13 0Z" fill="currentColor" />
+    <path d="M5 2.5c-.8.8.8 1.7 0 2.5M8 1.5c-.8.8.8 1.7 0 2.5M11 2.5c-.8.8.8 1.7 0 2.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+)
 
 export default function StatusWarga({ st }: { st: KeadaanHook }) {
   const k = st.k!
@@ -35,6 +33,7 @@ export default function StatusWarga({ st }: { st: KeadaanHook }) {
   const sisaTagihan = k.tagihan ? Date.parse(k.tagihan.jatuhTempo) - st.kini.getTime() : null
   const tagihanDekat = sisaTagihan !== null && sisaTagihan < 24 * 3_600_000 && k.peran !== 'walikota'
   const lemah = st.tenaga < 20
+  const lapar = sedangLapar(st.lapar)
 
   return (
     <div className="hud-pemain-wadah">
@@ -46,9 +45,9 @@ export default function StatusWarga({ st }: { st: KeadaanHook }) {
         <span className="hp-isi">
           <span className="hp-atas">
             <strong className="hp-nama">{k.warga.nama}</strong>
-            <span className="hp-uang" title={rupiah(k.kas)}>
+            <span className="hp-uang">
               <i>Rp</i>
-              {uangRingkas(k.kas)}
+              {Math.round(k.kas).toLocaleString('id-ID')}
             </span>
           </span>
           <span className={`hp-meter hp-tenaga${lemah ? ' lemah' : ''}`} role="meter" aria-label="Tenaga" aria-valuemin={0} aria-valuemax={k.tenaga.maks} aria-valuenow={st.tenaga}>
@@ -69,13 +68,21 @@ export default function StatusWarga({ st }: { st: KeadaanHook }) {
             </span>
             <span className="hp-angka">{st.kesehatan}</span>
           </span>
+          <span className={`hp-meter hp-lapar${lapar ? ' lapar' : ''}`} role="meter" aria-label="Lapar" aria-valuemin={0} aria-valuemax={k.lapar.maks} aria-valuenow={st.lapar}>
+            <Mangkuk />
+            <span className="hp-rel">
+              <i style={{ transform: `scaleX(${st.lapar / k.lapar.maks})` }} />
+            </span>
+            <span className="hp-angka">{st.lapar}</span>
+          </span>
         </span>
       </Link>
-      {(tagihanDekat || k.kasbon > 0 || k.kesehatan.sakit) && (
+      {(tagihanDekat || k.kasbon > 0 || k.kesehatan.sakit || lapar) && (
         <div className="hp-chip-baris">
           {tagihanDekat && <span className="hp-chip">Tagihan {lamaWaktu(Math.max(0, sisaTagihan!))} lagi</span>}
-          {k.kasbon > 0 && <span className="hp-chip merah">Kasbon {uangRingkas(k.kasbon)}</span>}
+          {k.kasbon > 0 && <span className="hp-chip merah">Kasbon {rupiah(k.kasbon)}</span>}
           {k.kesehatan.sakit && <span className="hp-chip merah">Sakit</span>}
+          {lapar && <span className="hp-chip merah">Lapar, segera makan</span>}
         </div>
       )}
     </div>

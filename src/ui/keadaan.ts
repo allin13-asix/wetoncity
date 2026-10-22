@@ -4,6 +4,7 @@
 // dengan kunci idempotensi, menyelaraskan jam dengan server, dan menghitung Tenaga serta Kesehatan yang berjalan.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { pulihkanTenaga } from '@/server/aturan'
+import { laparKini } from '@/server/sistem-aturan'
 import type { Keadaan } from '@/server/tipe'
 import { kunciBaru, panggil } from './api'
 
@@ -94,9 +95,11 @@ export function useKeadaan() {
   const kesehatan = k
     ? pulihkanTenaga({ tenaga: k.kesehatan.nilai, pada: new Date(k.kesehatan.pada) }, k.kesehatan.maks, k.kesehatan.selangMs, kini).tenaga
     : 0
+  // Wali Kota tidak pernah lapar
+  const lapar = k ? (k.peran === 'walikota' ? k.lapar.maks : laparKini(k.lapar.nilai, new Date(k.lapar.pada), kini)) : 0
   const bebas = sibuk === null && !k?.perjalanan
 
-  return { k, masuk, pesan, setPesan, sibuk, bebas, versi, lakukan, muat, kini, tenaga, penuhDalam, kesehatan }
+  return { k, masuk, pesan, setPesan, sibuk, bebas, versi, lakukan, muat, kini, tenaga, penuhDalam, kesehatan, lapar }
 }
 
 export type KeadaanHook = ReturnType<typeof useKeadaan>
