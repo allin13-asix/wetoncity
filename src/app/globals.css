@@ -2,6 +2,7 @@
 :root {
   --papan: #0c3446;
   --papan-2: #14506a;
+  --tinta: #0c3446;
   --kapur: #f1f5f4;
   --kertas: #ffffff;
   --garis: #cbd6d4;
@@ -28,6 +29,9 @@
   --redup: #9db8c2;
   --teks: #e7f0ee;
   --bayangan: 0 10px 30px rgb(0 0 0 / 0.5);
+  --tinta: #cfe3e8;
+  --sinyal: #ff7b6e;
+  --bendera: #8aa8ff;
   color-scheme: dark;
 }
 
@@ -41,6 +45,9 @@
     --redup: #9db8c2;
     --teks: #e7f0ee;
     --bayangan: 0 10px 30px rgb(0 0 0 / 0.5);
+    --tinta: #cfe3e8;
+    --sinyal: #ff7b6e;
+    --bendera: #8aa8ff;
     color-scheme: dark;
   }
 }
@@ -92,7 +99,7 @@ body {
 /* ---------- peta kota ---------- */
 .peta { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: #bfe4ef; }
 .peta canvas { display: block; }
-.peta-muat { position: absolute; inset: 0; display: grid; place-items: center; color: var(--papan); font-weight: 600; }
+.peta-muat { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tinta); font-weight: 600; }
 
 .hud { position: absolute; inset: 0; pointer-events: none; }
 .hud > * { pointer-events: none; }
@@ -133,12 +140,12 @@ body {
 }
 .kelompok { display: flex; padding: 2px; border-radius: 14px; background: var(--kapur); }
 .tombol-bilah {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 2px solid var(--papan); border-radius: 12px;
-  background: transparent; color: var(--papan); font-weight: 700; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 2px solid var(--tinta); border-radius: 12px;
+  background: transparent; color: var(--tinta); font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 :root[data-tema='gelap'] .tombol-bilah { color: var(--teks); border-color: var(--teks); }
 @media (prefers-color-scheme: dark) { :root:not([data-tema='terang']) .tombol-bilah { color: var(--teks); border-color: var(--teks); } }
-.tombol-bilah[aria-pressed='true'] { background: var(--papan); color: #fff; border-color: var(--papan); }
+.tombol-bilah[aria-pressed='true'] { background: var(--papan); color: #fff; border-color: var(--tinta); }
 .tombol-bilah.utama { background: var(--bollard); color: #1b1500; border-color: var(--bollard); }
 .tombol-bilah:disabled { opacity: 0.5; cursor: default; }
 
@@ -158,7 +165,7 @@ body {
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
-  background: color-mix(in srgb, var(--warna, var(--papan)) 16%, transparent); color: var(--teks); border: 1.5px solid var(--warna, var(--papan));
+  background: color-mix(in srgb, var(--warna, var(--papan)) 16%, transparent); color: var(--teks); border: 1.5px solid var(--warna, var(--tinta));
 }
 .chip-netral { --warna: var(--redup); }
 .chip-bicara { --warna: var(--lumut); }
@@ -210,7 +217,7 @@ body {
 .titik li.aktif { width: 22px; border-radius: 4px; background: var(--bollard); }
 .tombol-baris { display: flex; justify-content: flex-end; gap: 8px; }
 .tombol-baris button, .tautan {
-  min-height: 44px; padding: 0 16px; border-radius: 12px; border: 2px solid var(--papan); background: transparent; color: inherit; font-weight: 700; cursor: pointer;
+  min-height: 44px; padding: 0 16px; border-radius: 12px; border: 2px solid var(--tinta); background: transparent; color: inherit; font-weight: 700; cursor: pointer;
 }
 .tombol-baris button.utama { background: var(--bollard); border-color: var(--bollard); color: #1b1500; }
 .tombol-baris button.utama[aria-pressed='true'] { background: var(--lumut); border-color: var(--lumut); color: #fff; }
@@ -274,7 +281,7 @@ body {
 .pengantar { max-width: 66ch; margin: 0; color: var(--redup); font-size: 17px; }
 .halaman p { max-width: 70ch; }
 .anak { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
-.anak a { padding: 8px 14px; border: 2px solid var(--papan); border-radius: 999px; font-weight: 700; font-size: 14px; text-decoration: none; }
+.anak a { padding: 8px 14px; border: 2px solid var(--tinta); border-radius: 999px; font-weight: 700; font-size: 14px; text-decoration: none; }
 .anak a:hover { background: var(--papan); color: #fff; }
 .tombol-tautan { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 12px; background: var(--bollard); color: #1b1500; font-weight: 700; text-decoration: none; }
 
@@ -310,10 +317,10 @@ body {
 .saring { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 22px 0 16px; }
 .saring label { display: grid; gap: 2px; flex: 1 1 240px; max-width: 420px; font-size: 13px; font-weight: 700; color: var(--redup); }
 .saring input {
-  width: 100%; min-height: 44px; padding: 0 14px; border: 2px solid var(--papan); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit;
+  width: 100%; min-height: 44px; padding: 0 14px; border: 2px solid var(--tinta); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit;
 }
 .saring button {
-  min-height: 44px; padding: 0 16px; border: 2px solid var(--papan); border-radius: 12px; background: transparent; color: inherit; font-weight: 700; cursor: pointer;
+  min-height: 44px; padding: 0 16px; border: 2px solid var(--tinta); border-radius: 12px; background: transparent; color: inherit; font-weight: 700; cursor: pointer;
 }
 .saring button[aria-pressed='true'] { background: var(--lumut); border-color: var(--lumut); color: #fff; }
 .saring p { margin: 0 0 10px auto; color: var(--redup); font-size: 14px; }
@@ -335,7 +342,7 @@ body {
 .panggung-muat { position: absolute; inset: 0; display: grid; place-items: center; color: var(--redup); }
 .panggung-alat { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 8px; z-index: 5; }
 .panggung-alat button {
-  min-height: 40px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--papan); background: #fff; color: var(--papan); font-weight: 700; cursor: pointer;
+  min-height: 40px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--tinta); background: var(--kertas); color: var(--tinta); font-weight: 700; cursor: pointer;
 }
 .panggung-alat button[aria-pressed='true'] { background: var(--papan); color: #fff; }
 .daftar { overflow: auto; background: var(--kertas); border-left: 1px solid var(--garis); padding: 16px; max-height: calc(100dvh - 60px); }

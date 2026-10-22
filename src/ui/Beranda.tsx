@@ -21,6 +21,7 @@ import { lupakanSesi } from './sesi'
 import { koranDibaca } from './penandaKoran'
 import Pengingat from './Pengingat'
 import { TombolPasang } from './Pwa'
+import { PemutarMusik } from './PemutarMusik'
 
 const labelLedger: Record<string, string> = {
   uang_saku: 'Uang saku dari kampung', upah: 'Upah kerja', bonus_harian: 'Bonus harian', tagihan_hidup: 'Tagihan sewa, listrik, makan',
@@ -306,12 +307,14 @@ export default function Beranda() {
         <div className="kolom">
           <Teman bebas={st.bebas} lakukan={st.lakukan} versi={st.versi} />
           {k.punyaRumah && <Numpang {...p} />}
+          <PemutarMusik />
           <TombolPasang />
           <Pengingat />
 
           {k.peran === 'walikota' && (
             <section className="panel kantor">
               <h2>Kantor Wali Kota</h2>
+              <p><Link className="tombol-utama" href="/walikota">Buka ruang kendali: bansos, barang baru, pengumuman</Link></p>
               <p>
                 <Link className="tautan" href="/editor">Editor tata letak kota</Link> (hanya di server pengembangan) ·{' '}
                 <Link className="tautan" href="/koran/tulis">Meja redaksi Koran</Link>

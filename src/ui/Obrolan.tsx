@@ -1,7 +1,7 @@
 'use client'
 
-// Obrolan: ruang Kota (semua warga), ruang Gedung (penghuni satu gedung hunian), pesan Pribadi berutas, dan Teman (cari warga,
-// permintaan, daftar teman). Tab dan utas yang terbuka ada di alamat (?tab=, ?dengan=) supaya tombol kembali berfungsi.
+// Obrolan: ruang Kota (teks, semua warga), Alun-Alun dan Taman (ruang berwujud dengan avatar, 20 orang per ruang), Gedung
+// (ruang berwujud di dalam gedung hunian), pesan Pribadi berutas, dan Teman (cari warga, permintaan, daftar teman). Tab dan utas yang terbuka ada di alamat (?tab=, ?dengan=) supaya tombol kembali berfungsi.
 // Pesan baru diambil berkala hanya selama halaman terlihat, dan hanya yang lebih baru dari pesan terakhir.
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -10,6 +10,8 @@ import { panggil } from './api'
 import { KirimHadiah } from './Hadiah'
 import { aktifSejak, Teman } from './Kehidupan'
 import { useKeadaan } from './keadaan'
+import { useKanal } from './realtime'
+import { RuangAdegan } from './RuangAdegan'
 
 type Pesan = { id: number; isi: string; waktu: string; saya: boolean; dari?: { id: string; nama: string; level: number }; baru?: boolean }
 type Ruang = { id: string; nama: string }
@@ -36,11 +38,14 @@ function useBerkala(f: () => void, ms: number) {
 }
 
 /** Tampilan percakapan: daftar gelembung, ambil berkala pesan yang lebih baru, dan kolom tulis. */
-function Percakapan({ ambil, kirim, kosong, tampilNama }: {
+function Percakapan({ ambil, kirim, kosong, tampilNama, segarMs = SEGAR_MS, picu = 0 }: {
   ambil: (setelah: number) => Promise<Pesan[] | null>
   kirim: (isi: string) => Promise<string | null>
   kosong: string
   tampilNama: boolean
+  segarMs?: number
+  /** naik setiap ada isyarat pesan baru dari kanal waktu-nyata */
+  picu?: number
 }) {
   const [pesan, setPesan] = useState<Pesan[] | null>(null)
   const [tulis, setTulis] = useState('')
@@ -58,7 +63,10 @@ function Percakapan({ ambil, kirim, kosong, tampilNama }: {
       return semua
     })
   }, [ambil])
-  useBerkala(muat, SEGAR_MS)
+  useBerkala(muat, segarMs)
+  useEffect(() => {
+    if (picu) muat()
+  }, [picu, muat])
 
   // gulir ke pesan terbaru bila pemain memang sedang di bawah (atau baru membuka)
   const jumlah = pesan?.length ?? 0
@@ -113,21 +121,27 @@ function Percakapan({ ambil, kirim, kosong, tampilNama }: {
   )
 }
 
-function RuangObrolan({ ruang }: { ruang: Ruang }) {
+function RuangObrolan({ ruang, sayaId }: { ruang: Ruang; sayaId: string }) {
+  // dengan Supabase Realtime pesan baru diberi isyarat seketika, jadi pembacaan berkala cukup jarang
+  const [picu, setPicu] = useState(0)
+  const { aktif, kirim: isyarat } = useKanal(ruang.id, sayaId, { pesan: () => setPicu((n) => n + 1) })
   const ambil = useCallback(async (setelah: number) => {
     const r = await panggil<{ pesan: Pesan[] }>(`/api/obrolan?ruang=${encodeURIComponent(ruang.id)}&setelah=${setelah}`)
     return r.ok ? r.data.pesan : null
   }, [ruang.id])
   const kirim = useCallback(async (isi: string) => {
     const r = await panggil<unknown>('/api/obrolan', { ruang: ruang.id, isi })
+    if (r.ok) isyarat('pesan')
     return r.ok ? null : r.galat.pesan
-  }, [ruang.id])
+  }, [ruang.id, isyarat])
   return (
     <Percakapan
       key={ruang.id}
       ambil={ambil}
       kirim={kirim}
       tampilNama
+      segarMs={aktif ? 30_000 : SEGAR_MS}
+      picu={picu}
       kosong={ruang.id === 'global' ? 'Belum ada obrolan. Sapa warga kota!' : 'Belum ada obrolan di gedung ini. Sapa tetanggamu!'}
     />
   )
@@ -255,7 +269,7 @@ function CariWarga({ st, chat }: { st: ReturnType<typeof useKeadaan>; chat: (id:
   )
 }
 
-type Tab = 'kota' | 'gedung' | 'pribadi' | 'teman'
+type Tab = 'kota' | 'alun' | 'taman' | 'gedung' | 'pribadi' | 'teman'
 
 export default function Obrolan() {
   const router = useRouter()
@@ -277,14 +291,17 @@ export default function Obrolan() {
 
   const tabs: Array<{ id: Tab; label: string; lencana?: number; ada: boolean }> = [
     { id: 'kota', label: 'Kota', ada: true },
+    { id: 'alun', label: 'Alun-Alun', ada: true },
+    { id: 'taman', label: 'Taman', ada: true },
     { id: 'gedung', label: 'Gedung', ada: !!gedung },
     { id: 'pribadi', label: 'Pribadi', lencana: st.k?.pesanBaru, ada: true },
     { id: 'teman', label: 'Teman', lencana: st.k?.permintaanTeman, ada: true },
   ]
   let isi: ReactNode = null
   if (!st.k) isi = <p className="catatan">Memuat</p>
-  else if (tab === 'kota') isi = <RuangObrolan ruang={{ id: 'global', nama: 'Kota Weton' }} />
-  else if (tab === 'gedung') isi = gedung ? <><p className="catatan">Hanya penghuni {gedung.nama} yang bisa membaca ruang ini.</p><RuangObrolan ruang={gedung} /></> : <p className="catatan">Ruang gedung tersedia bagi penghuni Rusunawa, kost, dan hotel.</p>
+  else if (tab === 'kota') isi = <RuangObrolan ruang={{ id: 'global', nama: 'Kota Weton' }} sayaId={st.k.warga.id} />
+  else if (tab === 'alun' || tab === 'taman') isi = <RuangAdegan key={tab} jenis={tab} sayaId={st.k.warga.id} ruangAwal={q.get('ruang')} />
+  else if (tab === 'gedung') isi = gedung ? <><p className="catatan">Ruang tamu {gedung.nama}: hanya untuk penghuninya.</p><RuangAdegan key="hunian" jenis="hunian" sayaId={st.k.warga.id} /></> : <p className="catatan">Ruang gedung tersedia bagi penghuni Rusunawa, kost, dan hotel.</p>
   else if (tab === 'pribadi') isi = dengan ? <UtasPribadi dengan={dengan} kembali={() => ke('pribadi')} st={st} /> : <DaftarPribadi buka={(id) => ke('pribadi', id)} />
   else isi = (
     <>

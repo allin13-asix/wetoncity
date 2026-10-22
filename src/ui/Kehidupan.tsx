@@ -9,6 +9,7 @@ import { rupiah } from '@/data/ekonomi'
 import { lamaWaktu, panggil } from './api'
 import type { Props } from './FiturKota'
 import { KirimHadiah } from './Hadiah'
+import { IkonBarang, type IkonKustom } from './IkonBarang'
 
 /** "aktif 5 menit lalu", "aktif 2 hari lalu". */
 export function aktifSejak(iso: string): string {
@@ -65,7 +66,7 @@ export function Kondisi({ k }: Pick<Props, 'k'>) {
 type DataInventori = {
   kapasitas: number
   dipakai: number
-  barang: Array<{ id: string; jumlah: number; nama: string; jenis: string; satuan: string; ringkas: string; tenaga: number; kesehatan: number; lapar: number; bisaDipakai: boolean }>
+  barang: Array<{ id: string; jumlah: number; nama: string; jenis: string; satuan: string; ringkas: string; tenaga: number; kesehatan: number; lapar: number; bisaDipakai: boolean; ikon?: IkonKustom | null }>
   surat: Array<{ id: string; pengirim: string; judul: string; item: string | null; namaItem: string | null; jumlah: number; uang: number; waktu: string }>
 }
 type DataTeman = {
@@ -99,7 +100,8 @@ export function Inventori({ k, bebas, lakukan, versi }: Pick<Props, 'k' | 'bebas
         ) : (
           <ul className="lowongan">
             {d.barang.map((b) => (
-              <li key={b.id}>
+              <li key={b.id} className="baris-barang">
+                <IkonBarang id={b.id} jenis={b.jenis} kustom={b.ikon} />
                 <span>
                   <strong>
                     {b.nama} x{b.jumlah}

@@ -241,6 +241,15 @@ export default function AksiBangunan(p: Props & { jenis: string; idTempat: strin
   if (diSiniKerja) bagian.push(<Kerja key="kerja" {...p} />)
 
   if (hunian.some((h) => h.kamar && h.bangunan.includes(jenis))) bagian.push(<Kamar key="kamar" {...p} />)
+  if (k.hunian?.tempat && k.hunian.tempat === idTempat) {
+    bagian.push(
+      <section key="ruang-tamu" className="panel">
+        <h2>Ruang tamu gedung</h2>
+        <p className="catatan">Ngobrol dengan tetangga satu gedung.</p>
+        <Link className="tombol-sekunder" href="/pesan?tab=gedung">Masuk ruang tamu</Link>
+      </section>,
+    )
+  }
 
   switch (jenis) {
     case 'bursa-kerja':
@@ -273,7 +282,17 @@ export default function AksiBangunan(p: Props & { jenis: string; idTempat: strin
       }
       break
     case 'alun-alun':
-      bagian.push(<Peringkat key="peringkat" judul="Peringkat reputasi" />)
+      bagian.push(
+        <section key="nongkrong" className="panel aksi-utama">
+          <h2>Nongkrong di alun-alun</h2>
+          <p className="catatan">Ngobrol langsung dengan warga lain. Satu ruang paling banyak 20 orang; bila penuh, ruang baru dibuka.</p>
+          <div className="baris-aksi">
+            <Link className="tombol-utama" href="/pesan?tab=alun">Masuk Alun-Alun</Link>
+            <Link className="tombol-sekunder" href="/pesan?tab=taman">Ke Taman Kota</Link>
+          </div>
+        </section>,
+        <Peringkat key="peringkat" judul="Peringkat reputasi" />,
+      )
       break
     case 'rm-padang':
       bagian.push(

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { rupiah } from '@/data/ekonomi'
 import type { Keadaan } from '@/server/tipe'
 import { kunciBaru, panggil } from './api'
+import { IkonBarang } from './IkonBarang'
 
 type Jenis = 'bahan' | 'konsumsi' | 'koleksi'
 type BarisBarang = {
@@ -121,6 +122,7 @@ export default function Pasar() {
           return (
             <li key={b.id} className="panel pasar-barang">
               <div className="pasar-kepala">
+                <IkonBarang id={b.id} jenis={b.jenis} ukuran={48} />
                 <div>
                   <h2>{b.nama}</h2>
                   <p className="catatan">

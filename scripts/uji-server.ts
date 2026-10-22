@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { BONUS_HARIAN, MODAL_AWAL, TENAGA, UMK_AWAL, pajakBulanan } from '../src/data/ekonomi.ts'
-import { BANGUNAN_MILIK, HADIAH, LATIHAN, OBROLAN } from '../src/data/balans.ts'
+import { BANGUNAN_MILIK, HADIAH, LATIHAN, OBROLAN, RUANG } from '../src/data/balans.ts'
 import { koran } from '../src/data/koran.ts'
 import { SESI_CACHE_MS, buatSesi, cariSesi, daftar, hapusSesi, masuk } from '../src/server/akun.ts'
 import {
@@ -21,6 +21,8 @@ import {
 import { bacaRuang, bacaUtas, daftarPercakapan, kirimPribadi, kirimRuang, ruangSaya } from '../src/server/obrolan.ts'
 import { hargaBangunan, konteksHarga, properti } from '../src/server/properti.ts'
 import { milikKota } from '../src/server/sistem-aturan.ts'
+import { daftarAdegan, detakAdegan, keluarAdegan, masukAdegan } from '../src/server/ruang.ts'
+import { alatWalikota, dataWalikota } from '../src/server/walikota.ts'
 import { cariWarga, inventori, teman } from '../src/server/sistem.ts'
 import { edisiTanggal, galatEdisi, segarkanKoran, terbaru, terbit } from '../src/server/koran.ts'
 import { bungkus, literal } from '../src/server/kueri.ts'
@@ -410,6 +412,67 @@ uji('obrolan: ruang global untuk semua, ruang gedung hanya penghuninya, batas la
   for (let i = 0; i < OBROLAN.perMenitMaks; i++) await kirimRuang(sql, b, 'global', `pesan ${i}`, T0)
   await galat('terlalu_cepat', kirimRuang(sql, b, 'global', 'satu lagi', T0))
   await kirimRuang(sql, b, 'global', 'semenit kemudian', sesudah(menit(1) + 1000))
+})
+
+uji('ruang berwujud: masuk alun-alun, batas 20 orang membuka ruang baru, detak membawa hadirin dan pesan', async () => {
+  const orang = await Promise.all(Array.from({ length: RUANG.kapasitas + 1 }, async () => mulai(await baru())))
+  const ruang: string[] = []
+  for (const id of orang) ruang.push((await masukAdegan(sql, id, 'alun', undefined, T0)).ruang)
+  assert.equal(ruang.filter((r) => r === 'alun:1').length, RUANG.kapasitas)
+  assert.equal(ruang[RUANG.kapasitas], 'alun:2')
+  await galat('ruang_penuh', masukAdegan(sql, orang[RUANG.kapasitas], 'alun', 'alun:1', T0))
+  // bukan hadirin tidak boleh menulis di ruang alun-alun; hadirin boleh dan pesannya terbawa detak
+  const luar = await mulai(await baru())
+  await galat('ruang_ditolak', kirimRuang(sql, luar, 'alun:1', 'halo', T0))
+  await kirimRuang(sql, orang[0], 'alun:1', 'Sugeng rawuh', T0)
+  const d = await detakAdegan(sql, orang[1], 'alun:1', 0, 0.2, 0.3, sesudah(1000))
+  assert.equal(d.hadir, true)
+  assert.equal(d.orang.length, RUANG.kapasitas)
+  assert.deepEqual(d.pesan.map((p) => p.isi), ['Sugeng rawuh'])
+  assert.deepEqual(d.orang.find((o) => o.saya)?.x, 0.2)
+  // yang keluar memberi tempat; kehadiran basi juga tidak dihitung
+  await keluarAdegan(sql, orang[2])
+  assert.equal((await masukAdegan(sql, orang[RUANG.kapasitas], 'alun', 'alun:1', sesudah(2000))).ruang, 'alun:1')
+  const nanti = sesudah(RUANG.hadirMs + 5000)
+  assert.equal((await daftarAdegan(sql, luar, nanti)).alun.every((r) => r.isi === 0), true)
+  // ruang gedung hanya untuk penghuninya
+  await galat('tanpa_hunian', masukAdegan(sql, luar, 'hunian', undefined, T0))
+  await sql`update warga set hunian_tempat = 'rusun-weton-1' where id = ${luar}`
+  assert.equal((await masukAdegan(sql, luar, 'hunian', undefined, T0)).ruang, 'hunian:rusun-weton-1')
+  const asing = await detakAdegan(sql, orang[3], 'hunian:rusun-weton-1', 0, 0.5, 0.5, T0)
+  assert.equal(asing.hadir, false)
+})
+
+uji('wali kota: bansos uang dan barang lewat mailbox, barang buatan bisa dipakai, dihapus dari kota', async () => {
+  const wk = await mulai(await baru())
+  await sql`update warga set peran = 'walikota' where id = ${wk}`
+  const a = await mulai(await baru())
+  const b = await mulai(await baru())
+  await galat('bukan_walikota', alatWalikota(sql, a, kunci(), { aksi: 'pengumuman', isi: 'palsu' }, T0))
+  await alatWalikota(sql, wk, kunci(), { aksi: 'barang_baru', nama: 'Kue Lapis Weton', jenis: 'konsumsi', dasar: 12_000, satuan: 'potong', tenaga: 6, kesehatan: 0, lapar: 15, bentuk: 'kue', warna: '#e0533b' }, T0)
+  await galat('barang_ada', alatWalikota(sql, wk, kunci(), { aksi: 'barang_baru', nama: 'Kue Lapis Weton', jenis: 'koleksi', dasar: 1000, satuan: 'buah', bentuk: 'kue', warna: '#e0533b' }, T0))
+  const k = await alatWalikota(sql, wk, kunci(), { aksi: 'bansos', sasaran: 'warga', warga: a, uang: 250_000, item: 'k-kue-lapis-weton', jumlah: 3 }, T0)
+  assert.equal(k.walikota?.penerima, 1)
+  const kas = (await baris(a)).kas
+  await inventori(sql, a, kunci(), { aksi: 'klaim' }, T0)
+  assert.equal((await baris(a)).kas, kas + 250_000)
+  const [g] = await sql<{ jumlah: number }[]>`select jumlah from gudang where warga_id = ${a} and barang = 'k-kue-lapis-weton'`
+  assert.equal(g.jumlah, 3)
+  await sql`update warga set tenaga = 10, tenaga_pada = ${T0} where id = ${a}`
+  await inventori(sql, a, kunci(), { aksi: 'pakai', barang: 'k-kue-lapis-weton' }, T0)
+  assert.equal((await baris(a)).tenaga, 16)
+  await inventori(sql, a, kunci(), { aksi: 'kirim', ke: b, barang: 'k-kue-lapis-weton', jumlah: 1 }, T0)
+  // bansos ke warga aktif: semua yang baru main ikut
+  const semua = await alatWalikota(sql, wk, kunci(), { aksi: 'bansos', sasaran: 'aktif', uang: 50_000 }, T0)
+  assert.ok((semua.walikota?.penerima ?? 0) >= 2)
+  const d = await dataWalikota(sql, wk, T0)
+  assert.equal(d.kustom[0].id, 'k-kue-lapis-weton')
+  assert.equal(d.riwayat.length, 2)
+  await alatWalikota(sql, wk, kunci(), { aksi: 'pengumuman', isi: 'Pasar malam di alun-alun' }, T0)
+  assert.equal((await bacaRuang(sql, a, 'global', 0, T0)).pesan.some((p) => p.isi === '[Pengumuman] Pasar malam di alun-alun'), true)
+  await alatWalikota(sql, wk, kunci(), { aksi: 'barang_hapus', barang: 'k-kue-lapis-weton' }, T0)
+  assert.equal(await hitung(sql<{ n: number }[]>`select count(*)::int as n from gudang where barang = 'k-kue-lapis-weton'`), 0)
+  await galat('barang_tidak_ada', inventori(sql, b, kunci(), { aksi: 'pakai', barang: 'k-kue-lapis-weton' }, T0))
 })
 
 uji('pesan pribadi: ke siapa pun, utas berurutan, dibaca saat utas dibuka, daftar percakapan', async () => {

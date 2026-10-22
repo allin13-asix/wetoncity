@@ -6,8 +6,9 @@ import { HADIAH } from '@/data/balans'
 import type { Keadaan } from '@/server/tipe'
 import { kunciBaru, panggil } from './api'
 import { Tutup } from './ikon'
+import { IkonBarang, type IkonKustom } from './IkonBarang'
 
-type Barang = { id: string; nama: string; jumlah: number; satuan: string }
+type Barang = { id: string; nama: string; jumlah: number; satuan: string; jenis: string; ikon?: IkonKustom | null }
 
 export function KirimHadiah({ ke, onTutup }: { ke: { id: string; nama: string }; onTutup: () => void }) {
   const [barang, setBarang] = useState<Barang[] | null>(null)
@@ -57,6 +58,7 @@ export function KirimHadiah({ ke, onTutup }: { ke: { id: string; nama: string };
               {barang.map((x) => (
                 <li key={x.id}>
                   <button type="button" aria-pressed={x.id === pilih} onClick={() => { setPilih(x.id); setJumlah(1) }}>
+                    <IkonBarang id={x.id} jenis={x.jenis} kustom={x.ikon} ukuran={32} />
                     <strong>{x.nama}</strong>
                     <small>punya {x.jumlah} {x.satuan}</small>
                   </button>

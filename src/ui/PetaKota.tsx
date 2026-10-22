@@ -19,6 +19,7 @@ import PanelTur from './PanelTur'
 import { PanelLahan } from './PropertiPanel'
 import { navLain, navUtama } from './navigasi'
 import { Merek } from './Papan'
+import { MusikRingkas } from './PemutarMusik'
 import { TombolPasang } from './Pwa'
 
 const Adegan = dynamic(() => import('@/kota/Adegan'), {
@@ -218,6 +219,8 @@ export default function PetaKota() {
                 {navLain(!!st.masuk).map((t) => (
                   <Link key={t.href} href={t.href}>{t.label}</Link>
                 ))}
+                {k?.peran === 'walikota' && <Link href="/walikota">Kantor Wali Kota</Link>}
+                <MusikRingkas />
                 <TombolPasang ringkas />
               </nav>
             )}

@@ -331,6 +331,23 @@ export const LATIHAN = {
 /** Obrolan: ruang global dan per gedung hunian, serta utas pesan pribadi. Batas laju dihitung per pengirim. */
 export const OBROLAN = { panjangMaks: 300, perMenitMaks: 6, tampil: 60, utasTampil: 80, percakapanTampil: 40 } as const
 
+/**
+ * Ruang obrolan berwujud: alun-alun dan taman (beberapa ruang paralel), serta ruang dalam gedung hunian. Paling banyak
+ * `kapasitas` orang per ruang; kehadiran dianggap basi tanpa detak selama `hadirMs`. Klien berdetak tiap `detakMs` (atau
+ * `pollMs` saat tanpa Supabase Realtime, sekalian mengambil pesan dan posisi).
+ */
+export const RUANG = { kapasitas: 20, hadirMs: 45_000, detakMs: 15_000, pollMs: 2_500, instansMaks: 50 } as const
+
+/** Wali Kota: bansos lewat mailbox dan barang buatan sendiri. */
+export const WALIKOTA_SUPER = {
+  bansosUangMaks: 10_000_000,
+  bansosBarangMaks: 20,
+  /** sasaran "aktif": warga yang bermain dalam sekian hari terakhir */
+  aktifHari: 7,
+  barangKustomMaks: 60,
+  pengumumanMaks: 200,
+} as const
+
 /** Hadiah barang ke warga lain (aksi kirim di inventori): paling banyak sekian kali per tanggal WIB. */
 export const HADIAH = { kaliPerHari: 3 } as const
 

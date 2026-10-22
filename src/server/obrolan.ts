@@ -1,7 +1,7 @@
 // Obrolan: ruang global kota, ruang per gedung hunian (hanya penghuninya), dan utas pesan pribadi antara dua warga.
 // Sengaja tanpa dalamTransaksi: membaca dan mengirim masing-masing satu penerbangan ke basis data, supaya obrolan terasa
 // cepat. Batas laju dan hak masuk ruang diperiksa di pernyataan yang sama dengan insert.
-import { OBROLAN } from '../data/balans.ts'
+import { OBROLAN, RUANG } from '../data/balans.ts'
 import { jenisById } from '../data/bangunan.ts'
 import { penempatanById } from '../data/tataletak.ts'
 import type { Sql } from './db.ts'
@@ -24,13 +24,15 @@ const setelahSah = (x: unknown) => {
 }
 
 export function ruangSah(x: unknown): string {
-  if (typeof x === 'string' && /^(global|hunian:[a-z0-9-]{2,60})$/.test(x)) return x
+  if (typeof x === 'string' && /^(global|(alun|taman):[0-9]{1,3}|hunian:[a-z0-9-]{2,60})$/.test(x)) return x
   throw new Galat('ruang_tidak_ada', 'Ruang obrolan itu tidak ada.', 404)
 }
 
 /** Nama ruang untuk tampilan: "Kota Weton" atau nama gedung hunian beserta nomornya. */
 export function namaRuang(ruang: string): string {
   if (ruang === 'global') return 'Kota Weton'
+  const adegan = /^(alun|taman):(\d+)$/.exec(ruang)
+  if (adegan) return `${adegan[1] === 'alun' ? 'Alun-Alun Weton' : 'Taman Kota'}, ruang ${adegan[2]}`
   const tempat = ruang.slice('hunian:'.length)
   const p = penempatanById.get(tempat)
   const nomor = /-(\d+)$/.exec(tempat)?.[1]
@@ -47,17 +49,17 @@ export async function ruangSaya(sql: Sql, id: string) {
 }
 
 /** Pesan terbaru di satu ruang (yang lebih baru dari `setelah` bila diisi), urut lama ke baru. */
-export async function bacaRuang(sql: Sql, id: string, ruangMentah: unknown, setelahMentah?: unknown) {
+export async function bacaRuang(sql: Sql, id: string, ruangMentah: unknown, setelahMentah?: unknown, now = new Date()) {
   const ruang = ruangSah(ruangMentah)
   const setelah = setelahSah(setelahMentah)
   const q = bungkus(sql)
   const [[izin], baris] = await Promise.all([
-    q<{ boleh: boolean }[]>`select exists (select 1 from warga where id = ${id} and (${ruang} = 'global' or 'hunian:' || hunian_tempat = ${ruang})) as boleh`,
+    q<{ boleh: boolean }[]>`select ${ruang} = 'global' or exists (select 1 from warga where id = ${id} and 'hunian:' || hunian_tempat = ${ruang}) or exists (select 1 from ruang_hadir where warga_id = ${id} and ruang = ${ruang} and terakhir > ${new Date(now.getTime() - RUANG.hadirMs)}) as boleh`,
     q<BarisRuang[]>`
       select o.id, o.isi, o.dibuat_pada, w.id as warga_id, w.nama, w.level from obrolan o join warga w on w.id = o.warga_id
       where o.ruang = ${ruang} and o.id > ${setelah} order by o.id desc limit ${OBROLAN.tampil}`,
   ])
-  if (!izin?.boleh) throw new Galat('ruang_ditolak', 'Ruang ini hanya untuk penghuni gedungnya.', 403)
+  if (!izin?.boleh) throw new Galat('ruang_ditolak', 'Masuk ruangnya dulu. Ruang gedung hanya untuk penghuninya.', 403)
   return {
     ruang: { id: ruang, nama: namaRuang(ruang) },
     pesan: [...baris].reverse().map((b) => ({
@@ -72,14 +74,16 @@ export async function kirimRuang(sql: Sql, id: string, ruangMentah: unknown, isi
   const isi = teksPesan(isiMentah)
   const q = bungkus(sql)
   const [baru] = await q<{ id: number }[]>`
-    with s as (select id from warga where id = ${id} and (${ruang} = 'global' or 'hunian:' || hunian_tempat = ${ruang})),
+    with s as (
+        select id from warga where id = ${id} and (${ruang} = 'global' or 'hunian:' || hunian_tempat = ${ruang}
+          or exists (select 1 from ruang_hadir h where h.warga_id = ${id} and h.ruang = ${ruang} and h.terakhir > ${new Date(now.getTime() - RUANG.hadirMs)}))),
       l as (select count(*)::int as n from obrolan where warga_id = ${id} and dibuat_pada > ${new Date(now.getTime() - MENIT)})
     insert into obrolan (ruang, warga_id, isi, dibuat_pada) select ${ruang}, s.id, ${isi}, ${now} from s, l where l.n < ${OBROLAN.perMenitMaks}
     returning id`
   if (baru) return { id: Number(baru.id) }
   // jalur jarang: cari tahu kenapa ditolak
-  const [izin] = await q<{ boleh: boolean }[]>`select exists (select 1 from warga where id = ${id} and (${ruang} = 'global' or 'hunian:' || hunian_tempat = ${ruang})) as boleh`
-  if (!izin?.boleh) throw new Galat('ruang_ditolak', 'Ruang ini hanya untuk penghuni gedungnya.', 403)
+  const [izin] = await q<{ boleh: boolean }[]>`select ${ruang} = 'global' or exists (select 1 from warga where id = ${id} and 'hunian:' || hunian_tempat = ${ruang}) or exists (select 1 from ruang_hadir where warga_id = ${id} and ruang = ${ruang} and terakhir > ${new Date(now.getTime() - RUANG.hadirMs)}) as boleh`
+  if (!izin?.boleh) throw new Galat('ruang_ditolak', 'Masuk ruangnya dulu. Ruang gedung hanya untuk penghuninya.', 403)
   throw new Galat('terlalu_cepat', `Paling banyak ${OBROLAN.perMenitMaks} pesan per menit. Tunggu sebentar.`, 429)
 }
 

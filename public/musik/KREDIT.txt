@@ -1,0 +1,13 @@
+Rekaman di folder ini berasal dari Wikimedia Commons dan dibagikan ulang sesuai lisensinya (dikonversi ke mp3 mono).
+
+gamelan-kraton-ngayogyakarta.mp3
+  "Gamelan angka 1 Kraton Ngayogyakarta" oleh RTB45, CC BY 4.0
+  https://commons.wikimedia.org/wiki/File:Gamelan_angka_1_Kraton_Ngayogyakarta.ogg
+
+ketawang-mijil-wigaringtyas.mp3
+  "Ketawang Mijil Wigaringtyas Pelog Nem" oleh Dandung Adityo Argo Prasetyo, Karawitan Marta Yogiswara, CC BY-SA 4.0
+  https://commons.wikimedia.org/wiki/File:Ketawang_Mijil_Wigaringtyas_Pelog_Nem.oga
+
+ketawang-sekar-teja.mp3
+  "Ketawang Sekar Teja Slendro Manyura" oleh Dandung Adityo Argo Prasetyo, Karawitan Marta Yogiswara, CC BY-SA 4.0
+  https://commons.wikimedia.org/wiki/File:Ketawang_Sekar_Teja_Slendro_Manyura.oga

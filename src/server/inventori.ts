@@ -2,12 +2,13 @@
 // kapasitas total dari src/data/balans.ts. Barang yang tidak muat masuk ke tabel `surat` untuk diklaim nanti.
 import { INVENTORI } from '../data/balans.ts'
 import { BARANG, PASAR, adalahBarang } from './aturan.ts'
+import { barangDikenal, kustomTersimpan } from './barangKustom.ts'
 import { Galat } from './galat.ts'
 import type { Tx } from './kueri.ts'
 
 export type IsiSurat = { pengirim: string; judul: string; sumber: string; item?: string; jumlah?: number; uang?: number }
 
-export const namaBarang = (id: string) => (adalahBarang(id) ? BARANG[id].nama : id)
+export const namaBarang = (id: string) => (adalahBarang(id) ? BARANG[id].nama : (kustomTersimpan(id)?.nama ?? id))
 
 /** Kirim surat ke mailbox. Ditolak diam-diam bila mailbox penerima sudah penuh. Tidak menunggu hasil. */
 export function kirimSurat(tx: Tx, id: string, s: IsiSurat, now: Date): void {
@@ -28,7 +29,7 @@ export async function totalInventori(tx: Tx, id: string): Promise<number> {
  * Kunci penasihat per pemain mencegah dua transaksi serentak sama-sama melihat ruang kosong yang sama.
  */
 export async function isiInventori(tx: Tx, id: string, item: string, jumlah: number): Promise<number> {
-  if (!adalahBarang(item)) throw new Galat('barang_tidak_ada', 'Barang itu tidak dikenal.')
+  if (!(await barangDikenal(tx, item))) throw new Galat('barang_tidak_ada', 'Barang itu tidak dikenal.')
   if (!Number.isInteger(jumlah) || jumlah < 1) return 0
   await tx`select pg_advisory_xact_lock(hashtext(${'inv:' + id}))`
   const [r] = await tx<{ total: string; ada: string }[]>`
