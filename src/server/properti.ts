@@ -4,17 +4,18 @@
 //  3. Properti milik pemain dijual dengan harga patokan (beli_tetap) atau lewat negosiasi: penawaran, tawar-balik, terima,
 //     tolak, atau kedaluwarsa. Perpindahan kepemilikan dan pembayaran terjadi dalam satu transaksi atomik (pindahMilik).
 // Konstruksi bangunan ada di game.ts (lahan 'rumah' dan 'bangun'); progresnya dihitung dari waktu server.
-import { BANGUN, PROPERTI } from '../data/balans.ts'
+import { BANGUN, BANGUNAN_MILIK, PROPERTI } from '../data/balans.ts'
 import { jenisById } from '../data/bangunan.ts'
-import { npc as dataNpc } from '../data/npc.ts'
-import { distrik, lahanKosong, penempatan } from '../data/tataletak.ts'
+import { UMK_AWAL, indeksHarga } from '../data/ekonomi.ts'
+import { npc as dataNpc, npcDi } from '../data/npc.ts'
+import { distrik, lahanKosong, penempatan, penempatanById } from '../data/tataletak.ts'
 import { HUNIAN_PINDAHAN, LAHAN, hargaLahan } from './aturan.ts'
 import type { Sql } from './db.ts'
 import { Galat } from './galat.ts'
 import { catat, dalamTransaksi, wajibMulai } from './game.ts'
 import { catatAktivitas } from './kemajuan.ts'
 import { bungkus, type Tx } from './kueri.ts'
-import { progresBangun, tahapBangun, wajibUuid } from './sistem-aturan.ts'
+import { adalahRumah, milikKota, progresBangun, tahapBangun, wajibUuid } from './sistem-aturan.ts'
 import type { BarisLahan, Warga } from './tipe.ts'
 
 const rupiah = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
@@ -24,20 +25,72 @@ type Tawaran = {
   giliran: 'penjual' | 'pembeli'; status: string; babak: number; induk: string | null; dibuat_pada: Date; kedaluwarsa_pada: Date
 }
 
-// ---------------------------------------------------------------- properti NPC
+// ---------------------------------------------------------------- kepemilikan bangunan dan harga
 
-/** Rumah NPC yang dijual: bangunan di peta dengan harga di PROPERTI.hargaNpc, tiap rumah milik satu NPC yang tinggal di sekitarnya. */
+/**
+ * Bangunan milik warga NPC yang bisa dibeli: semua bangunan di peta selain milik Pemerintah Kota. Pemilik NPC-nya warga yang
+ * bekerja di jenis bangunan itu, atau yang tinggal di distrik atau jenis bangunannya, atau warga yang bisa diajak bicara.
+ */
 export const PROPERTI_NPC = penempatan
-  .filter((p) => PROPERTI.hargaNpc[p.jenis] !== undefined)
+  .filter((p) => !milikKota(p.jenis))
   .map((p, urut) => {
-    const cocok = dataNpc.filter((n) => n.tempatTinggal === p.distrik || n.tempatTinggal === p.jenis)
-    const kumpulan = cocok.length ? cocok : dataNpc.filter((n) => n.interaktif)
+    const kerja = npcDi(p.jenis)
+    const tinggal = dataNpc.filter((n) => n.tempatTinggal === p.distrik || n.tempatTinggal === p.jenis)
+    const kumpulan = kerja.length ? kerja : tinggal.length ? tinggal : dataNpc.filter((n) => n.interaktif)
     const n = kumpulan[urut % kumpulan.length]
     return {
-      id: p.id, jenis: p.jenis, nama: jenisById.get(p.jenis)?.nama ?? p.jenis, distrik: distrik.find((d) => d.id === p.distrik)?.nama ?? p.distrik,
-      harga: PROPERTI.hargaNpc[p.jenis], npc: { id: n.id, nama: n.nama, peran: n.peran },
+      id: p.id, jenis: p.jenis, namaAsli: jenisById.get(p.jenis)?.nama ?? p.jenis, distrik: distrik.find((d) => d.id === p.distrik)?.nama ?? p.distrik,
+      rumah: adalahRumah(p.jenis), npc: { id: n.id, nama: n.nama, peran: n.peran },
     }
   })
+
+/** Ekonomi sekitar untuk harga bangunan: properti milik pemain per distrik, pemain per bangunan (kerja dan tinggal), dan UMK. */
+export type KonteksHarga = { milikDistrik: Map<string, number>; ramai: Map<string, number>; umk: number }
+
+export async function konteksHarga(q: Tx): Promise<KonteksHarga> {
+  const [milik, kerja, huni, [kota]] = await Promise.all([
+    q<{ lahan_id: string }[]>`select lahan_id from lahan_milik`,
+    q<{ t: string; n: number }[]>`select tempat_kerja as t, count(*)::int as n from warga where tempat_kerja is not null and peran <> 'walikota' group by 1`,
+    q<{ t: string; n: number }[]>`select hunian_tempat as t, count(*)::int as n from warga where hunian_tempat is not null and peran <> 'walikota' group by 1`,
+    q<{ umk: number }[]>`select umk from kota where id = 1`,
+  ])
+  const milikDistrik = new Map<string, number>()
+  for (const m of milik) {
+    const d = penempatanById.get(m.lahan_id)?.distrik ?? lahanKosong.find((l) => l.id === m.lahan_id)?.distrik
+    if (d) milikDistrik.set(d, (milikDistrik.get(d) ?? 0) + 1)
+  }
+  const ramai = new Map<string, number>()
+  for (const r of [...kerja, ...huni]) ramai.set(r.t, (ramai.get(r.t) ?? 0) + r.n)
+  return { milikDistrik, ramai, umk: kota ? Number(kota.umk) : UMK_AWAL }
+}
+
+/**
+ * Harga bangunan = (nilai tanah x faktor distrik + nilai bangunan x faktor ramai) x indeks harga UMK, dibulatkan ke Rp 100.000.
+ * Tanah naik bila distriknya makin banyak dimiliki pemain; bangunan naik bila makin banyak pemain bekerja atau tinggal di sana.
+ */
+export function hargaBangunan(id: string, k: KonteksHarga) {
+  const p = penempatanById.get(id)!
+  const j = jenisById.get(p.jenis)!
+  const luas = j.ukuran[0] * j.ukuran[1]
+  const faktorDistrik = Math.min(BANGUNAN_MILIK.distrikMaks, 1 + BANGUNAN_MILIK.distrikPerMilik * (k.milikDistrik.get(p.distrik) ?? 0))
+  const orang = k.ramai.get(id) ?? 0
+  const faktorRamai = Math.min(BANGUNAN_MILIK.ramaiMaks, 1 + BANGUNAN_MILIK.ramaiPerOrang * orang)
+  const indeks = indeksHarga(k.umk)
+  const bulat = (n: number) => Math.round(n / 100_000) * 100_000
+  const tanah = bulat(luas * LAHAN.hargaPerPetak * faktorDistrik * indeks)
+  const bangunan = bulat((PROPERTI.hargaNpc[p.jenis] ?? luas * (BANGUNAN_MILIK.nilaiPerPetak[j.kategori] ?? 300_000)) * faktorRamai * indeks)
+  return { harga: tanah + bangunan, tanah, bangunan, luas: Math.round(luas), faktorDistrik, faktorRamai, orang }
+}
+
+/** Nama bangunan dari pemiliknya: tanpa karakter kendali dan tanda kurung sudut; kosong berarti kembali ke nama asli. */
+function namaSah(x: unknown): string | null {
+  const t = typeof x === 'string' ? x.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim() : ''
+  if (!t) return null
+  if (t.length < BANGUNAN_MILIK.namaMin || t.length > BANGUNAN_MILIK.namaMaks) {
+    throw new Galat('nama_tidak_valid', `Nama bangunan ${BANGUNAN_MILIK.namaMin} sampai ${BANGUNAN_MILIK.namaMaks} karakter.`)
+  }
+  return t
+}
 
 // ---------------------------------------------------------------- pemindahan milik
 
@@ -73,7 +126,8 @@ async function pindahMilik(tx: Tx, pembeli: Warga, penjual: Warga, aktor: Warga,
   if (r.n >= LAHAN.maksMilik) throw new Galat('lahan_penuh', `Paling banyak ${LAHAN.maksMilik} properti per warga.`, 409)
   if (pembeli.kas < harga) throw new Galat('uang_kurang', 'Uang tidak cukup untuk membeli properti ini.', 409)
   const pindah = await tx`
-    update lahan_milik set warga_id = ${pembeli.id}, dibeli_pada = ${now}, jual_mode = 'tidak', jual_harga = null
+    update lahan_milik set warga_id = ${pembeli.id}, dibeli_pada = ${now}, jual_mode = 'tidak', jual_harga = null,
+      harga_beli = ${harga}, hasil_pada = ${now}, nama_kustom = null
     where lahan_id = ${m.lahan_id} and warga_id = ${penjual.id}`
   if (pindah.count === 0) throw new Galat('sudah_berpindah', 'Properti itu sudah berpindah tangan.', 409)
   await catat(tx, pembeli, { akun: 'kas', jenis: 'beli_properti', jumlah: -harga, kunci, rincian: { properti: m.lahan_id, dari: penjual.id } }, now)
@@ -98,6 +152,7 @@ function cekPita(harga: number, patokan: number): void {
 
 export type PerintahProperti =
   | { aksi: 'beli_npc'; properti: string }
+  | { aksi: 'nama'; lahan: string; nama: unknown }
   | { aksi: 'jual'; lahan: string; mode: 'tidak' | 'tetap' | 'negosiasi'; harga?: number }
   | { aksi: 'beli_tetap'; lahan: string }
   | { aksi: 'tawar'; lahan: string; harga: number }
@@ -113,15 +168,28 @@ export const properti = (sql: Sql, id: string, kunci: string, p: PerintahPropert
 
     if (p.aksi === 'beli_npc') {
       const np = PROPERTI_NPC.find((x) => x.id === p.properti)
-      if (!np) throw new Galat('properti_tidak_ada', 'Rumah itu tidak dijual NPC.')
-      if ((await jumlahMilik(tx, w.id)) >= LAHAN.maksMilik) throw new Galat('lahan_penuh', `Paling banyak ${LAHAN.maksMilik} properti per warga.`, 409)
-      if (w.kas < np.harga) throw new Galat('uang_kurang', 'Uang tidak cukup untuk membeli rumah ini.', 409)
+      if (!np) {
+        throw new Galat('properti_tidak_ada', penempatanById.has(p.properti) ? 'Bangunan ini milik Pemerintah Kota dan tidak dijual.' : 'Bangunan itu tidak ada.')
+      }
+      // satu penerbangan: jumlah milik dan ekonomi sekitar untuk harga saat ini
+      const [n, kh] = await Promise.all([jumlahMilik(tx, w.id), konteksHarga(tx)])
+      if (n >= LAHAN.maksMilik) throw new Galat('lahan_penuh', `Paling banyak ${LAHAN.maksMilik} properti per warga.`, 409)
+      const { harga } = hargaBangunan(np.id, kh)
+      if (w.kas < harga) throw new Galat('uang_kurang', `Uang tidak cukup: harganya ${rupiah(harga)}.`, 409)
       const masuk = await tx`
-        insert into lahan_milik (lahan_id, warga_id, dibeli_pada, rumah, jenis_objek) values (${np.id}, ${w.id}, ${now}, true, 'bangunan')
+        insert into lahan_milik (lahan_id, warga_id, dibeli_pada, rumah, jenis_objek, harga_beli, hasil_pada)
+        values (${np.id}, ${w.id}, ${now}, ${np.rumah}, 'bangunan', ${harga}, ${now})
         on conflict do nothing`
-      if (masuk.count === 0) throw new Galat('sudah_terjual', 'Rumah itu sudah dibeli warga lain.', 409)
-      await catat(tx, w, { akun: 'kas', jenis: 'beli_properti_npc', jumlah: -np.harga, kunci, rincian: { properti: np.id, npc: np.npc.id } }, now)
+      if (masuk.count === 0) throw new Galat('sudah_terjual', 'Bangunan itu sudah dibeli warga lain.', 409)
+      await catat(tx, w, { akun: 'kas', jenis: 'beli_properti_npc', jumlah: -harga, kunci, rincian: { properti: np.id, npc: np.npc.id } }, now)
       catatAktivitas(tx, w, 'transaksi', 1, now)
+      return
+    }
+
+    if (p.aksi === 'nama') {
+      const nama = namaSah(p.nama)
+      const ubah = await tx`update lahan_milik set nama_kustom = ${nama} where lahan_id = ${p.lahan} and warga_id = ${w.id}`
+      if (ubah.count === 0) throw new Galat('bukan_milik', 'Bangunan itu bukan milikmu.', 403)
       return
     }
 
@@ -219,12 +287,13 @@ export const properti = (sql: Sql, id: string, kunci: string, p: PerintahPropert
 /** Peta properti untuk panel lahan, dialog NPC, dan daftar tawaran: pemilik, harga, status jual, dan konstruksi. */
 export async function daftarProperti(sql: Sql, id: string, now = new Date()) {
   const q = bungkus(sql)
-  const [milik, tawaran] = await Promise.all([
+  const [milik, tawaran, kh] = await Promise.all([
     q<Array<BarisLahan & { pemilik_nama: string }>>`select m.*, w.nama as pemilik_nama from lahan_milik m join warga w on w.id = m.warga_id`,
     q<Array<Tawaran & { penjual_nama: string; pembeli_nama: string }>>`
       select t.*, wp.nama as penjual_nama, wb.nama as pembeli_nama
       from penawaran_properti t join warga wp on wp.id = t.penjual_id join warga wb on wb.id = t.pembeli_id
       where t.status = 'terbuka' and t.kedaluwarsa_pada > ${now} and (t.penjual_id = ${id} or t.pembeli_id = ${id}) order by t.dibuat_pada desc`,
+    konteksHarga(q),
   ])
   const peta = new Map(milik.map((m) => [m.lahan_id, m]))
   const bangun = (m: BarisLahan | undefined) => {
@@ -249,7 +318,12 @@ export async function daftarProperti(sql: Sql, id: string, now = new Date()) {
     }),
     npc: PROPERTI_NPC.map((np) => {
       const m = peta.get(np.id)
-      return { ...np, status: status(m, 'dijual'), pemilik: pemilik(m), jual: jual(m) }
+      const h = hargaBangunan(np.id, kh)
+      return {
+        ...np, nama: m?.nama_kustom ?? np.namaAsli, harga: h.harga, rincian: h, status: status(m, 'dijual'), pemilik: pemilik(m), jual: jual(m),
+        // perkiraan hasil dasar per siklus tagihan untuk pemilik (rumah tidak menghasilkan)
+        hasilDasar: np.rumah ? 0 : Math.floor((m?.harga_beli ?? h.harga) * BANGUNAN_MILIK.hasilDasarPerSiklus),
+      }
     }),
     tawaran: tawaran.map((t) => ({
       id: t.id, lahan: t.lahan_id, harga: t.harga, babak: t.babak, giliran: t.giliran, kedaluwarsa: t.kedaluwarsa_pada.toISOString(),
@@ -259,6 +333,7 @@ export async function daftarProperti(sql: Sql, id: string, now = new Date()) {
     aturan: {
       kedaluwarsaJam: PROPERTI.tawarKedaluwarsaMs / 3_600_000, babakMaks: PROPERTI.babakMaks, tawarMinRasio: PROPERTI.tawarMinRasio, tawarMaksRasio: PROPERTI.tawarMaksRasio,
       jualMaks: PROPERTI.jualMaks, milikMaks: LAHAN.maksMilik,
+      bagiUpah: BANGUNAN_MILIK.bagiUpah, bagiSewa: BANGUNAN_MILIK.bagiSewa, namaMin: BANGUNAN_MILIK.namaMin, namaMaks: BANGUNAN_MILIK.namaMaks,
     },
     dialogNpc: PROPERTI.dialogNpc,
     bangunan: Object.entries(BANGUN).map(([jenis, b]) => ({ jenis, nama: b.nama, biaya: b.biaya, durasiMs: b.durasiMs, hunian: b.hunian })),

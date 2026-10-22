@@ -1,26 +1,35 @@
 'use client'
 
-// Properti: panel lahan di peta (mengarahkan ke Balai Kota), dialog dengan NPC pemilik rumah, properti milikmu (konstruksi,
+// Properti: panel lahan di peta (mengarahkan ke Balai Kota), kepemilikan tiap bangunan (kota, NPC, atau pemain), properti milikmu (konstruksi,
 // jual dengan harga tetap atau negosiasi), dan tawaran masuk dan keluar.
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { rupiah } from '@/data/ekonomi'
 import { LAHAN } from '@/server/aturan'
+import { milikKota } from '@/server/sistem-aturan'
 import type { Keadaan } from '@/server/tipe'
 import { lamaWaktu, panggil } from './api'
 import type { Props } from './FiturKota'
+import { segarkanPeta } from './namaBangunan'
 
 type Bangun = NonNullable<Keadaan['lahan'][number]['bangun']>
 type Jual = { mode: 'tetap' | 'negosiasi'; harga: number }
 type DataProperti = {
   lahan: Array<{ id: string; distrik: string; luas: number; harga: number; status: 'kota' | 'milikmu' | 'pemain'; pemilik: { id: string; nama: string } | null; jual: Jual | null; bangun: Bangun | null }>
-  npc: Array<{ id: string; jenis: string; nama: string; distrik: string; harga: number; npc: { id: string; nama: string; peran: string }; status: 'dijual' | 'milikmu' | 'terjual'; pemilik: { id: string; nama: string } | null; jual: Jual | null }>
+  npc: Array<{
+    id: string; jenis: string; nama: string; namaAsli: string; distrik: string; rumah: boolean; harga: number; hasilDasar: number
+    rincian: { harga: number; tanah: number; bangunan: number; luas: number; faktorDistrik: number; faktorRamai: number; orang: number }
+    npc: { id: string; nama: string; peran: string }; status: 'dijual' | 'milikmu' | 'pemain'; pemilik: { id: string; nama: string } | null; jual: Jual | null
+  }>
   tawaran: Array<{
     id: string; lahan: string; harga: number; babak: number; giliran: string; kedaluwarsa: string; saya: 'penjual' | 'pembeli'
     penjual: { id: string; nama: string }; pembeli: { id: string; nama: string }; giliranku: boolean; bisaTawarBalik: boolean
   }>
-  aturan: { kedaluwarsaJam: number; babakMaks: number; tawarMinRasio: number; tawarMaksRasio: number; jualMaks: number; milikMaks: number }
-  dialogNpc: { sapa: string; tawar: string; setuju: string }
+  aturan: {
+    kedaluwarsaJam: number; babakMaks: number; tawarMinRasio: number; tawarMaksRasio: number; jualMaks: number; milikMaks: number
+    bagiUpah: number; bagiSewa: number; namaMin: number; namaMaks: number
+  }
+  dialogNpc: { sapa: string; tawar: string; setuju: string; sapaUsaha: string; setujuUsaha: string }
   bangunan: Array<{ jenis: string; nama: string; biaya: number; durasiMs: number; hunian: boolean }>
 }
 
@@ -240,39 +249,89 @@ export function PanelLahan({ id, versi, k, bebas, lakukan, keBalaiKota, onTutup 
 }
 
 /** Dialog dengan NPC pemilik rumah: harga tetap, tanpa tawar-menawar. Bila sudah dibeli pemain, tampil sebagai properti pemain. */
-export function DialogRumahNpc({ idTempat, versi, k, bebas, lakukan }: Props & { idTempat: string; versi: number }) {
+/**
+ * Kepemilikan satu bangunan di peta: milik Pemerintah Kota (tidak dijual), milik warga NPC (bisa dibeli dengan harga tanah +
+ * bangunan yang mengikuti ekonomi sekitar), atau milik pemain (nama buatan pemilik, penghasilan, jual dan tawar-menawar).
+ */
+export function KepemilikanBangunan({ idTempat, jenis, versi, k, bebas, lakukan }: Props & { idTempat: string; jenis: string; versi: number }) {
   const d = useProperti(versi)
+  const [nama, setNama] = useState<string | null>(null)
+  if (milikKota(jenis)) {
+    return (
+      <section className="panel kepemilikan">
+        <h2>Kepemilikan</h2>
+        <p className="milik-baris"><span className="chip chip-netral">Pemerintah Kota Weton</span> Fasilitas kota, tidak dijual.</p>
+      </section>
+    )
+  }
   const n = d?.npc.find((x) => x.id === idTempat)
   if (!d || !n) return null
+  const r = n.rincian
+  const penghasilan = !n.rumah && (
+    <p className="catatan">
+      Penghasilan pemilik: {Math.round(d.aturan.bagiUpah * 100)}% upah pemain yang bekerja di sini, {Math.round(d.aturan.bagiSewa * 100)}% sewa penghuninya,
+      dan sekitar {rupiah(n.hasilDasar)} per minggu. Masuk otomatis ke uangmu saat kamu bermain.
+    </p>
+  )
+  const rincianHarga = (
+    <dl className="rincian">
+      <div><dt>Tanah ({r.luas} petak)</dt><dd>{rupiah(r.tanah)}</dd></div>
+      <div><dt>Bangunan</dt><dd>{rupiah(r.bangunan)}</dd></div>
+      <div className="jumlah"><dt>Harga</dt><dd>{rupiah(n.harga)}</dd></div>
+    </dl>
+  )
   return (
-    <section className="panel aksi-utama">
-      <h2>{n.status === 'dijual' ? `Bicara dengan ${n.npc.nama}` : 'Rumah ini'}</h2>
+    <section className="panel aksi-utama kepemilikan">
+      <h2>Kepemilikan</h2>
       {n.status === 'dijual' ? (
         <>
-          <p className="sapaan">“{d.dialogNpc.sapa}”</p>
+          <p className="milik-baris"><span className="chip chip-bicara">Milik {n.npc.nama}</span> {n.npc.peran}</p>
+          <p className="sapaan">“{n.rumah ? d.dialogNpc.sapa : d.dialogNpc.sapaUsaha}”</p>
+          {rincianHarga}
           <p className="catatan">
-            {n.npc.nama}, {n.npc.peran}. {d.dialogNpc.tawar}
+            Harga tanah naik bila makin banyak properti di {n.distrik} dimiliki warga ({Math.round((r.faktorDistrik - 1) * 100)}% sekarang); harga bangunan naik bila makin
+            ramai pemain bekerja atau tinggal di sini ({r.orang} orang, {Math.round((r.faktorRamai - 1) * 100)}%).
           </p>
-          <p>
-            Harga tetap <strong>{rupiah(n.harga)}</strong> untuk {n.nama} di {n.distrik}.
-          </p>
-          <button type="button" className="tombol-utama" disabled={!bebas || k.kas < n.harga || k.lahan.length >= d.aturan.milikMaks} onClick={() => lakukan(`beli-npc-${n.id}`, '/api/properti', { aksi: 'beli_npc', properti: n.id }, d.dialogNpc.setuju)}>
+          {penghasilan}
+          <button type="button" className="tombol-utama" disabled={!bebas || k.kas < n.harga || k.lahan.length >= d.aturan.milikMaks} onClick={() => lakukan(`beli-npc-${n.id}`, '/api/properti', { aksi: 'beli_npc', properti: n.id }, n.rumah ? d.dialogNpc.setuju : d.dialogNpc.setujuUsaha)}>
             Beli {rupiah(n.harga)}
           </button>
           {k.lahan.length >= d.aturan.milikMaks && <p className="catatan">Kamu sudah memiliki {d.aturan.milikMaks} properti, batas maksimum.</p>}
         </>
       ) : n.status === 'milikmu' ? (
         <>
-          <p className="pesan ok">Rumah ini milikmu, dibeli dari {n.npc.nama}.</p>
+          <p className="milik-baris"><span className="chip chip-bicara">Milikmu</span> dibeli dari {n.npc.nama}</p>
+          <form
+            className="baris-aksi ganti-nama"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const baru = (nama ?? n.nama).trim()
+              lakukan(`nama-${n.id}`, '/api/properti', { aksi: 'nama', lahan: n.id, nama: baru === n.namaAsli ? '' : baru }, baru && baru !== n.namaAsli ? `Bangunan diberi nama ${baru}` : 'Nama bangunan kembali asli')
+                .then((ok) => {
+                  if (ok) segarkanPeta()
+                })
+            }}
+          >
+            <label className="tulis-label">
+              Nama bangunan
+              <input value={nama ?? n.nama} minLength={d.aturan.namaMin} maxLength={d.aturan.namaMaks} placeholder={n.namaAsli} onChange={(e) => setNama(e.target.value)} />
+            </label>
+            <button type="submit" className="tombol-sekunder" disabled={!bebas}>Simpan nama</button>
+          </form>
+          {penghasilan}
+          <p className="catatan">Nilai pasar sekarang {rupiah(n.harga)}.</p>
           <JualProperti id={n.id} jual={n.jual} bebas={bebas} lakukan={lakukan} batasHarga={n.harga} />
           <DaftarTawaran d={d} bebas={bebas} lakukan={lakukan} lahan={n.id} />
         </>
       ) : (
         <>
-          <p>Sudah dibeli {n.pemilik?.nama}.</p>
-          {n.pemilik && <Link className="tautan" href={`/profil/${n.pemilik.id}`}>Kunjungi profil pemilik</Link>}
+          <p className="milik-baris">
+            <span className="chip chip-bicara">Milik {n.pemilik?.nama}</span>
+            {n.pemilik && <Link className="tautan" href={`/profil/${n.pemilik.id}`}>Lihat profil</Link>}
+          </p>
+          <p className="catatan">Nilai pasar sekarang {rupiah(n.harga)}.</p>
           {n.jual && n.jual.mode === 'tetap' && (
-            <button type="button" className="tombol-utama" disabled={!bebas || k.kas < n.jual.harga} onClick={() => lakukan(`beli-tetap-${n.id}`, '/api/properti', { aksi: 'beli_tetap', lahan: n.id }, 'Rumah sekarang milikmu')}>
+            <button type="button" className="tombol-utama" disabled={!bebas || k.kas < n.jual.harga} onClick={() => lakukan(`beli-tetap-${n.id}`, '/api/properti', { aksi: 'beli_tetap', lahan: n.id }, 'Bangunan sekarang milikmu')}>
               Beli {rupiah(n.jual.harga)}
             </button>
           )}

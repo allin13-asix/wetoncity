@@ -16,7 +16,7 @@ import {
   BARANG, KEBIJAKAN_UMK, KONSUMSI, NUMPANG, PASAR, TEMUAN, adalahBarang, biayaLapak, gajiPekerjaan, hargaNpc, ikanPerSiklus, pitaLapak, pasaran,
   rentangUmk, trenEkonomi, type Barang, KESEHATAN, kapasitasHunian, minKeahlianUntuk, sakit, uktUntuk,
 } from './aturan.ts'
-import { BANGUN, GANTI_KERJA, INVENTORI, LAPAR, LATIHAN, LEVEL, MEMANCING, NAMA_ATRIBUT, SELEKSI, STATISTIK, type Atribut } from '../data/balans.ts'
+import { BANGUN, BANGUNAN_MILIK, GANTI_KERJA, HADIAH, INVENTORI, LAPAR, LATIHAN, LEVEL, MEMANCING, NAMA_ATRIBUT, SELEKSI, STATISTIK, type Atribut } from '../data/balans.ts'
 import { semuaPekerjaan, type Pekerjaan } from '../data/pekerjaan.ts'
 import type { Sql, Tx as TxMentah } from './db.ts'
 import { Galat } from './galat.ts'
@@ -84,7 +84,8 @@ function simpan(tx: Tx, w: Warga, now: Date): void {
       wajib_pindah_tenggat = ${w.wajib_pindah_tenggat}, wajib_pindah_dari = ${w.wajib_pindah_dari},
       ganti_kerja = ${tx.json(w.ganti_kerja ?? [])}, tempat_kerja = ${w.tempat_kerja}, seleksi = ${tx.json(w.seleksi ?? {})},
       latihan_id = ${w.latihan_id}, latihan_target = ${w.latihan_target}, latihan_selesai = ${w.latihan_selesai}, latihan_jeda = ${w.latihan_jeda},
-      profil_properti = ${w.profil_properti}, pancing = ${w.pancing ? tx.json(w.pancing) : null}
+      profil_properti = ${w.profil_properti}, pancing = ${w.pancing ? tx.json(w.pancing) : null},
+      hadiah_tanggal = ${w.hadiah_tanggal}, hadiah_kali = ${w.hadiah_kali}
     where id = ${w.id}`
 }
 
@@ -109,6 +110,8 @@ async function tagihSiklus(tx: Tx, w: Warga, now: Date, pertama: boolean, numpan
     }
     const r = rincianTagihan(h, w.umk)
     await bayarAtauKasbon(tx, w, 'tagihan_hidup', r.total, { hunian: h.id, sewa: r.sewa, listrik: r.listrik, makan: r.makan }, now)
+    // gedung hunian milik pemain: sebagian sewa ditahan untuk pemiliknya (cair saat pemilik beraksi)
+    if (w.hunian_tempat) bagiHasilBangunan(tx, w.hunian_tempat, r.sewa * BANGUNAN_MILIK.bagiSewa, 'sewa', now)
     if (h.id === NUMPANG.id) {
       const n = numpangAktif
       if (n && n.uang_dapur > 0) {
@@ -185,7 +188,18 @@ function aturNumpang(tx: Tx, w: Warga, now: Date, n: BarisNumpang | undefined): 
   if (w.hunian_id === NUMPANG.id) w.hunian_id = HUNIAN_PINDAHAN
 }
 
-/** Cairkan uang yang ditahan untuk warga ini: hasil lapak (dipotong biaya lapak) dan uang dapur dari penumpang. */
+/**
+ * Catat bagi hasil untuk pemilik bangunan `tempat` bila bangunan itu milik pemain (selain itu tidak ada baris yang masuk).
+ * Ditunda tanpa round-trip, dan hanya insert: tidak mengunci baris pemilik maupun memicu baca ulang milik pelaku.
+ */
+function bagiHasilBangunan(tx: Tx, tempat: string, jumlah: number, sumber: 'upah' | 'sewa', now: Date): void {
+  const n = Math.round(jumlah)
+  if (n > 0) tx.tulis`
+    insert into hasil_bangunan (lahan_id, jumlah, sumber, dibuat_pada)
+    select lahan_id, ${n}, ${sumber}, ${now} from lahan_milik where lahan_id = ${tempat} and jenis_objek = 'bangunan'`
+}
+
+/** Cairkan uang yang ditahan untuk warga ini: hasil lapak (dipotong biaya lapak), uang dapur dari penumpang, dan penghasilan bangunan milik. */
 async function cairkan(tx: Tx, w: Warga, now: Date): Promise<void> {
   // skip locked: lapak yang sedang dibeli orang lain dicairkan lain kali, jadi dua pemain yang saling membeli tidak saling menunggu.
   // Ketiga pernyataan tidak saling membaca hasil, jadi satu penerbangan; delete harus sesudah update lapak (urutan kirim dijaga).
@@ -206,6 +220,23 @@ async function cairkan(tx: Tx, w: Warga, now: Date): Promise<void> {
   }
   const dapur = dp.reduce((t, b) => t + Number(b.jumlah), 0)
   if (dapur > 0) await catat(tx, w, { akun: 'kas', jenis: 'uang_dapur', jumlah: dapur, rincian: { sebab: 'uang dapur penumpang' } }, now)
+
+  // bangunan milik: hasil dasar sejak terakhir dihitung (dari harga beli, rumah tidak), lalu bagi hasil upah dan sewa yang
+  // terkumpul. Keduanya satu penerbangan; baris bagi hasil yang sedang ditulis transaksi lain menunggu pencairan berikutnya.
+  const [dasar, bagi] = await Promise.all([
+    tx<{ lahan: string; jumlah: string }[]>`
+      with x as (
+        select lahan_id, harga_beli, hasil_pada from lahan_milik
+        where warga_id = ${w.id} and jenis_objek = 'bangunan' and not rumah and harga_beli is not null and hasil_pada <= ${new Date(now.getTime() - BANGUNAN_MILIK.hasilSelangMs)}
+        -- no key update: tidak menahan insert hasil_bangunan dari transaksi pekerja (kunci foreign key)
+        for no key update)
+      update lahan_milik m set hasil_pada = ${now} from x where m.lahan_id = x.lahan_id
+      returning x.lahan_id as lahan, floor(x.harga_beli * ${BANGUNAN_MILIK.hasilDasarPerSiklus}::numeric * extract(epoch from (${now} - x.hasil_pada)) / ${SIKLUS_MS / 1000}::numeric) as jumlah`,
+    tx<{ lahan: string; jumlah: string }[]>`
+      delete from hasil_bangunan h using lahan_milik m where h.lahan_id = m.lahan_id and m.warga_id = ${w.id} returning h.lahan_id as lahan, h.jumlah`,
+  ])
+  const hasil = [...dasar, ...bagi].reduce((t, b) => t + Number(b.jumlah), 0)
+  if (hasil > 0) await catat(tx, w, { akun: 'kas', jenis: 'hasil_properti', jumlah: hasil, rincian: { bangunan: [...new Set([...dasar, ...bagi].map((b) => b.lahan))] } }, now)
 }
 
 /** Hasil kueri awal transaksi yang dibutuhkan selesaikan(), supaya ia tidak perlu bertanya lagi ke basis data. */
@@ -319,9 +350,10 @@ type Milik = {
   penumpang?: Permintaan[]
   surat?: number
   permintaanTeman?: number
+  pesanBaru?: number
 }
 
-/** Delapan kueri milik warga. Dikembalikan malas (belum dikirim) supaya pemanggil menaruhnya dalam satu penerbangan. */
+/** Sembilan kueri milik warga. Dikembalikan malas (belum dikirim) supaya pemanggil menaruhnya dalam satu penerbangan. */
 function kueriMilik(tx: Tx, id: string) {
   return {
     usaha: tx<BarisUsaha[]>`select * from usaha where warga_id = ${id} order by dibuat_pada`,
@@ -335,19 +367,22 @@ function kueriMilik(tx: Tx, id: string) {
       where n.pemilik_id = ${id} and n.status in ('minta', 'aktif') order by n.dibuat_pada`,
     surat: tx<{ n: number }[]>`select count(*)::int as n from surat where warga_id = ${id}`,
     teman: tx<{ n: number }[]>`select count(*)::int as n from pertemanan where status = 'minta' and peminta <> ${id} and (a = ${id} or b = ${id})`,
+    pesan: tx<{ n: number }[]>`select count(*)::int as n from pesan where ke_id = ${id} and not dibaca`,
   }
 }
 
 async function susunMilik(k: ReturnType<typeof kueriMilik>): Promise<Milik> {
-  const [usaha, lahan, gudang, lapak, [numpang], penumpang, [surat], [teman]] = await Promise.all([k.usaha, k.lahan, k.gudang, k.lapak, k.numpang, k.penumpang, k.surat, k.teman])
+  const [usaha, lahan, gudang, lapak, [numpang], penumpang, [surat], [teman], [pesan]] = await Promise.all([
+    k.usaha, k.lahan, k.gudang, k.lapak, k.numpang, k.penumpang, k.surat, k.teman, k.pesan,
+  ])
   return {
     usaha: [...usaha], lahan: [...lahan], gudang: Object.fromEntries(gudang.map((g) => [g.barang, g.jumlah])), lapak: [...lapak],
-    numpang: numpang ?? null, penumpang: [...penumpang], surat: surat?.n ?? 0, permintaanTeman: teman?.n ?? 0,
+    numpang: numpang ?? null, penumpang: [...penumpang], surat: surat?.n ?? 0, permintaanTeman: teman?.n ?? 0, pesanBaru: pesan?.n ?? 0,
   }
 }
 
 /** Tabel yang ditulis transaksi tanpa mengubah isi kueriMilik; tulisan ke tabel lain membuat milik dibaca ulang. */
-const TABEL_BUKAN_MILIK = new Set(['warga', 'ledger', 'aksi_log'])
+const TABEL_BUKAN_MILIK = new Set(['warga', 'ledger', 'aksi_log', 'hasil_bangunan', 'pesan'])
 
 export function keadaan(w: Warga, now: Date, milik: Milik = { usaha: [], lahan: [] }): Keadaan {
   const h = hunianById(w.hunian_id)
@@ -451,6 +486,8 @@ export function keadaan(w: Warga, now: Date, milik: Milik = { usaha: [], lahan: 
     inventori: { dipakai: Object.values(milik.gudang ?? {}).reduce((t, n) => t + (n ?? 0), 0), kapasitas: INVENTORI.kapasitas },
     suratBaru: milik.surat ?? 0,
     permintaanTeman: milik.permintaanTeman ?? 0,
+    pesanBaru: milik.pesanBaru ?? 0,
+    hadiahSisa: Math.max(0, HADIAH.kaliPerHari - (w.hadiah_tanggal === hari ? w.hadiah_kali : 0)),
     wajibPindah: w.wajib_pindah_tenggat && w.wajib_pindah_dari ? { tenggat: w.wajib_pindah_tenggat.toISOString(), dari: w.wajib_pindah_dari } : null,
     gantiKerja: (() => {
       const g = cekGantiKerja(w.ganti_kerja ?? [], now)
@@ -530,7 +567,10 @@ async function jalankanAksi(koneksi: postgres.ReservedSql, id: string, o: Opsi, 
   const qNumpang = tx<BarisNumpang[]>`select * from numpang where penumpang_id = ${id} and status in ('minta', 'aktif') for update`
   const qCair = tx<{ cair: boolean }[]>`
     select exists (select 1 from lapak where penjual_id = ${id} and (uang_tertahan > 0 or sisa = 0))
-        or exists (select 1 from numpang where pemilik_id = ${id} and uang_tertahan > 0) as cair`
+        or exists (select 1 from numpang where pemilik_id = ${id} and uang_tertahan > 0)
+        or exists (select 1 from lahan_milik where warga_id = ${id} and jenis_objek = 'bangunan' and not rumah and harga_beli is not null
+          and hasil_pada <= ${new Date(o.now.getTime() - BANGUNAN_MILIK.hasilSelangMs)})
+        or exists (select 1 from hasil_bangunan h join lahan_milik m on m.lahan_id = h.lahan_id where m.warga_id = ${id}) as cair`
   const qKoran = koranBasi() ? tx<BarisKoran[]>`select tanggal, berita, besok from koran_edisi` : null
   const qMilik = kueriMilik(tx, id)
   await Promise.all([tx.mentah('begin'), qWarga, qKota, qLog, qNumpang, qCair, qKoran, ...Object.values(qMilik)])
@@ -741,6 +781,8 @@ export const kerja = (sql: Sql, id: string, kunci: string, aksi: number, now = n
     }
     await catat(tx, w, { akun: 'kas', jenis: 'upah', jumlah: upah, kunci, rincian: { pekerjaan: p.id, aksi, tier: p.tier, keahlian: w.keahlian } }, now)
     w.upah_siklus += upah
+    // tempat kerja milik pemain: pemiliknya mendapat bagi hasil dari kas kota, tidak memotong upah pekerja
+    if (w.tempat_kerja) bagiHasilBangunan(tx, w.tempat_kerja, upah * BANGUNAN_MILIK.bagiUpah, 'upah', now)
     catatAktivitas(tx, w, 'kerja', aksi, now)
   })
 
@@ -1279,6 +1321,12 @@ export async function daftarKamarTamu(sql: Sql, id: string) {
  * Bangunan warga di peta: lahan yang sedang atau sudah dibangun, dengan jenis model, nama pemilik, dan progres konstruksi
  * (0 sampai 1, dihitung dari waktu server) beserta tahap visual dan bagian model yang terlihat.
  */
+/** Nama bangunan buatan pemiliknya, untuk label peta dan judul panel bangunan. */
+export async function namaBangunan(sql: Sql): Promise<Record<string, string>> {
+  const baris = await bungkus(sql)<{ lahan_id: string; nama_kustom: string }[]>`select lahan_id, nama_kustom from lahan_milik where nama_kustom is not null`
+  return Object.fromEntries(baris.map((b) => [b.lahan_id, b.nama_kustom]))
+}
+
 export async function rumahDiPeta(sql: Sql, now = new Date()) {
   const baris = await sql<{ lahan: string; nama: string; bangun_jenis: string; bangun_mulai: Date; bangun_selesai: Date }[]>`
     select m.lahan_id as lahan, w.nama, m.bangun_jenis, m.bangun_mulai, m.bangun_selesai

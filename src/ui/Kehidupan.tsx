@@ -4,11 +4,18 @@
 // peringkat reputasi, serta pekerja dan lowongan per bangunan. Semua angka dihitung server; di sini hanya tampilan.
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { ATRIBUT, LAPAR, NAMA_ATRIBUT, STATISTIK } from '@/data/balans'
+import { ATRIBUT, NAMA_ATRIBUT, STATISTIK } from '@/data/balans'
 import { rupiah } from '@/data/ekonomi'
-import { laparKini, sedangLapar } from '@/server/sistem-aturan'
 import { lamaWaktu, panggil } from './api'
 import type { Props } from './FiturKota'
+import { KirimHadiah } from './Hadiah'
+
+/** "aktif 5 menit lalu", "aktif 2 hari lalu". */
+export function aktifSejak(iso: string): string {
+  const ms = Date.now() - Date.parse(iso)
+  if (ms < 5 * 60_000) return 'baru saja aktif'
+  return `aktif ${lamaWaktu(ms).replace(/ \d+ (menit|jam)$/, '')} lalu`
+}
 
 function Meter({ nama, nilai, maks, kelas = '', teks }: { nama: string; nilai: number; maks: number; kelas?: string; teks?: string }) {
   return (
@@ -26,20 +33,14 @@ function Meter({ nama, nilai, maks, kelas = '', teks }: { nama: string; nilai: n
 
 // ---------------------------------------------------------------- kondisi
 
-/** Lapar, level dan EXP, reputasi, atribut, serta peringatan rawat inap, wajib pindah, dan kursus yang berjalan. */
-export function Kondisi({ k, kini }: Pick<Props, 'k' | 'kini'>) {
-  const lapar = laparKini(k.lapar.nilai, new Date(k.lapar.pada), kini)
-  const hungry = k.peran !== 'walikota' && sedangLapar(lapar)
+/**
+ * Level dan EXP, reputasi, atribut, dan batas ganti pekerjaan, dilipat di Beranda. Lapar, rawat inap, wajib pindah,
+ * dan kursus yang berjalan tampil di bagian atas Beranda.
+ */
+export function Kondisi({ k }: Pick<Props, 'k'>) {
   return (
-    <section className="panel">
-      <h2>Kondisi</h2>
-      {k.dirawat && <p className="pesan galat">Kamu dirawat di rumah sakit karena kelaparan, sampai {new Date(k.dirawat.sampai).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.</p>}
-      {hungry && !k.dirawat && (
-        <p className="pesan galat">
-          Kamu LAPAR: Tenaga pulih setengah lajunya dan Kesehatan turun {LAPAR.kesehatanKurang} tiap jam (tidak di bawah {LAPAR.kesehatanMin}). Makan di RM Padang, beli di minimarket, lalu pakai dari inventori.
-        </p>
-      )}
-      <Meter nama="Lapar" nilai={lapar} maks={k.lapar.maks} kelas={hungry ? 'sakit' : 'sehat'} teks={`${lapar} / ${k.lapar.maks}${hungry ? ' (lapar)' : ''}`} />
+    <details className="panel lipat">
+      <summary>Level {k.level.nilai}, reputasi, dan atribut</summary>
       <Meter nama={`Level ${k.level.nilai}`} nilai={k.level.exp} maks={k.level.perlu} teks={`EXP ${k.level.exp.toLocaleString('id-ID')} / ${k.level.perlu.toLocaleString('id-ID')}`} />
       <p className="catatan">
         Reputasi <strong>{k.reputasi.total.toLocaleString('id-ID')}</strong>, pekan ini {k.reputasi.minggu.toLocaleString('id-ID')}.{' '}
@@ -51,17 +52,11 @@ export function Kondisi({ k, kini }: Pick<Props, 'k' | 'kini'>) {
           <Meter key={a} nama={NAMA_ATRIBUT[a]} nilai={k.atribut[a]} maks={STATISTIK.maks} teks={String(k.atribut[a])} />
         ))}
       </div>
-      {k.wajibPindah && (
-        <p className="pesan galat">
-          Kamu menolak atau memutus pertemanan dengan teman sekamar, jadi wajib pindah sebelum {new Date(k.wajibPindah.tenggat).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.
-        </p>
-      )}
-      {k.latihan && <p className="catatan">Sedang ikut: {k.latihan.nama}, selesai {lamaWaktu(Date.parse(k.latihan.selesai) - kini.getTime())} lagi.</p>}
       {!k.latihan && k.latihanJeda && <p className="catatan">Istirahat setelah kursus sampai {new Date(k.latihanJeda).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.</p>}
       <p className="catatan">
         Ganti pekerjaan: sisa {k.gantiKerja.sisa} dari {k.gantiKerja.maks} kali pekan ini{k.gantiKerja.jedaSampai ? `, bisa lagi ${new Date(k.gantiKerja.jedaSampai).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}.
       </p>
-    </section>
+    </details>
   )
 }
 
@@ -74,7 +69,7 @@ type DataInventori = {
   surat: Array<{ id: string; pengirim: string; judul: string; item: string | null; namaItem: string | null; jumlah: number; uang: number; waktu: string }>
 }
 type DataTeman = {
-  teman: Array<{ id: string; nama: string; level: number }>
+  teman: Array<{ id: string; nama: string; level: number; aktif: string }>
   masuk: Array<{ id: string; nama: string; level: number; sekamar: boolean }>
   keluar: Array<{ id: string; nama: string; level: number }>
   sekamar: Array<{ id: string; nama: string; status: string }>
@@ -187,6 +182,7 @@ export function Inventori({ k, bebas, lakukan, versi }: Pick<Props, 'k' | 'bebas
 /** Teman, permintaan pertemanan (termasuk otomatis dari teman sekamar), dan teman sekamar. */
 export function Teman({ bebas, lakukan, versi }: Pick<Props, 'bebas' | 'lakukan'> & { versi: number }) {
   const [d, setD] = useState<DataTeman | null>(null)
+  const [hadiah, setHadiah] = useState<{ id: string; nama: string } | null>(null)
   useEffect(() => {
     panggil<DataTeman>('/api/teman').then((r) => r.ok && setD(r.data))
   }, [versi])
@@ -251,23 +247,27 @@ export function Teman({ bebas, lakukan, versi }: Pick<Props, 'bebas' | 'lakukan'
       )}
       <h3 className="sub">Daftar teman ({d.teman.length})</h3>
       {d.teman.length === 0 ? (
-        <p className="catatan">Belum ada teman. Buka profil warga lain dari daftar pekerja di sebuah bangunan lalu tambahkan sebagai teman.</p>
+        <p className="catatan">
+          Belum ada teman. <Link className="tautan" href="/pesan?tab=teman">Cari warga</Link> menurut nama, atau sapa warga lain di <Link className="tautan" href="/pesan">obrolan kota</Link>.
+        </p>
       ) : (
-        <ul className="lowongan">
+        <ul className="daftar-teman">
           {d.teman.map((t) => (
             <li key={t.id}>
-              <span>
+              <Link className="teman-nama" href={`/profil/${t.id}`}>
                 <strong>{t.nama}</strong>
-                <small>Level {t.level}</small>
-              </span>
+                <small>Level {t.level} · {aktifSejak(t.aktif)}</small>
+              </Link>
               <span className="baris-aksi">
-                <Link className="tombol-sekunder" href={`/profil/${t.id}`}>Profil</Link>
-                <button type="button" className="tombol-sekunder" disabled={!bebas} onClick={() => aksi('putus', 'putus', t.id, `Pertemanan dengan ${t.nama} diputus`)}>Putus</button>
+                <Link className="tombol-sekunder" href={`/pesan?dengan=${t.id}`}>Chat</Link>
+                <button type="button" className="tombol-sekunder" onClick={() => setHadiah({ id: t.id, nama: t.nama })}>Hadiah</button>
+                <button type="button" className="tombol-tipis" disabled={!bebas} onClick={() => confirm(`Putus pertemanan dengan ${t.nama}?`) && aksi('putus', 'putus', t.id, `Pertemanan dengan ${t.nama} diputus`)}>Putus</button>
               </span>
             </li>
           ))}
         </ul>
       )}
+      {hadiah && <KirimHadiah ke={hadiah} onTutup={() => setHadiah(null)} />}
     </section>
   )
 }

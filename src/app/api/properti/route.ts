@@ -20,6 +20,9 @@ export const POST = aksi((id, b, kunci) => {
     case 'beli_npc':
       p = { aksi: 'beli_npc', properti: s('properti') }
       break
+    case 'nama':
+      p = { aksi: 'nama', lahan: s('lahan'), nama: b.nama }
+      break
     case 'jual':
       p = { aksi: 'jual', lahan: s('lahan'), mode: b.mode as 'tidak' | 'tetap' | 'negosiasi', harga: Number(b.harga) }
       break

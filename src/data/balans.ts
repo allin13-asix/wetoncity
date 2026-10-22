@@ -127,6 +127,9 @@ export const PROPERTI = {
     sapa: 'Rumah ini sudah lama saya tempati. Kalau cocok, saya lepas dengan harga pas.',
     tawar: 'Harga sudah saya hitung dari biaya bangun dan lokasi. Tidak bisa ditawar, tapi suratnya lengkap.',
     setuju: 'Baik, kuncinya sekarang milikmu. Rawat baik-baik, ya.',
+    /** untuk bangunan usaha (bukan rumah) */
+    sapaUsaha: 'Usaha ini sudah lama saya kelola. Kalau cocok, saya lepas dengan harga pasar hari ini.',
+    setujuUsaha: 'Baik, usaha ini sekarang milikmu. Jaga pegawai dan pelanggannya, ya.',
   },
 } as const
 
@@ -325,4 +328,37 @@ export const LATIHAN = {
 
 // ---------------------------------------------------------------- pesan antarpemain
 
-export const PESAN = { panjangMaks: 300, perJamMaks: 20, inboxTampil: 50 } as const
+/** Obrolan: ruang global dan per gedung hunian, serta utas pesan pribadi. Batas laju dihitung per pengirim. */
+export const OBROLAN = { panjangMaks: 300, perMenitMaks: 6, tampil: 60, utasTampil: 80, percakapanTampil: 40 } as const
+
+/** Hadiah barang ke warga lain (aksi kirim di inventori): paling banyak sekian kali per tanggal WIB. */
+export const HADIAH = { kaliPerHari: 3 } as const
+
+// ---------------------------------------------------------------- kepemilikan bangunan
+
+/**
+ * Bangunan di peta milik Pemerintah Kota (kategori dan jenis di bawah, tidak bisa dibeli) atau milik warga NPC (bisa dibeli).
+ * Harga = (nilai tanah x faktor distrik + nilai bangunan x faktor ramai) x indeks harga UMK.
+ *  - nilai tanah: luas petak x LAHAN.hargaPerPetak; faktor distrik naik tiap properti milik pemain di distrik itu (ekonomi sekitar).
+ *  - nilai bangunan: luas x nilaiPerPetak kategori (rumah memakai PROPERTI.hargaNpc); faktor ramai naik tiap pemain yang bekerja
+ *    atau tinggal di bangunan itu (perkembangan aset).
+ * Penghasilan pasif pemilik (rumah tidak): bagi hasil dari upah pemain yang bekerja di sana, bagian sewa penghuninya, dan hasil
+ * dasar per siklus dari harga beli. Semua ditahan di bangunan lalu masuk kas saat pemilik beraksi.
+ */
+export const BANGUNAN_MILIK = {
+  kategoriKota: ['layanan', 'pendidikan', 'kesehatan', 'publik', 'pelabuhan'] as readonly string[],
+  /** jenis lain milik kota: rusun pemerintah, kompleks yang sedang ditertibkan, lahan proyek, dan kavling contoh */
+  jenisKota: ['rusun-weton', 'lokalisasi', 'papan-proyek', 'kavling'] as readonly string[],
+  nilaiPerPetak: { ekonomi: 450_000, industri: 250_000, hunian: 600_000 } as Record<string, number>,
+  distrikPerMilik: 0.04,
+  distrikMaks: 1.6,
+  ramaiPerOrang: 0.02,
+  ramaiMaks: 1.5,
+  bagiUpah: 0.1,
+  bagiSewa: 0.5,
+  hasilDasarPerSiklus: 0.01,
+  /** hasil dasar ditambahkan paling sering sekali per selang ini */
+  hasilSelangMs: JAM,
+  namaMin: 3,
+  namaMaks: 32,
+} as const

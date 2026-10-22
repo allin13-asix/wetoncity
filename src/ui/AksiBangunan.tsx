@@ -16,7 +16,7 @@ import { lamaWaktu, panggil } from './api'
 import { Bank, Kuliah, Numpang, Perjalanan, Rsud, Usaha, type Props } from './FiturKota'
 import { Memancing, Minimarket, Roulette } from './Hiburan'
 import { Peringkat, PekerjaBangunan } from './Kehidupan'
-import { DialogRumahNpc, PropertiSaya } from './PropertiPanel'
+import { KepemilikanBangunan, PropertiSaya } from './PropertiPanel'
 
 type Lowongan = Keadaan['lowongan'][number]
 
@@ -341,10 +341,7 @@ export default function AksiBangunan(p: Props & { jenis: string; idTempat: strin
       bagian.push(<Usaha key="usaha" {...p} />)
       break
     case 'rumah-menengah':
-      bagian.push(<DialogRumahNpc key="npc" {...p} idTempat={idTempat} />, <Numpang key="numpang" {...p} />)
-      break
-    case 'rumah-nelayan':
-      bagian.push(<DialogRumahNpc key="npc" {...p} idTempat={idTempat} />)
+      bagian.push(<Numpang key="numpang" {...p} />)
       break
     case 'koran-weton':
       bagian.push(
@@ -373,6 +370,7 @@ export default function AksiBangunan(p: Props & { jenis: string; idTempat: strin
   // transparansi pekerja: NPC dan pemain, kuota lowongan, dan tombol kunjungi profil
   if (pekerjaanDi(jenis).length > 0) bagian.push(<PekerjaBangunan key="pekerja" tempat={idTempat} versi={versi} />)
 
-  if (!bagian.length) return null
+  // siapa pemilik bangunan ini: kota, NPC (bisa dibeli), atau pemain
+  bagian.push(<KepemilikanBangunan key="milik" {...p} idTempat={idTempat} jenis={jenis} />)
   return <div className="aksi-bangunan">{bagian}</div>
 }

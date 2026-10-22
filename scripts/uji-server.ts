@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { BONUS_HARIAN, MODAL_AWAL, TENAGA, UMK_AWAL, pajakBulanan } from '../src/data/ekonomi.ts'
-import { LATIHAN } from '../src/data/balans.ts'
+import { BANGUNAN_MILIK, HADIAH, LATIHAN, OBROLAN } from '../src/data/balans.ts'
 import { koran } from '../src/data/koran.ts'
 import { SESI_CACHE_MS, buatSesi, cariSesi, daftar, hapusSesi, masuk } from '../src/server/akun.ts'
 import {
@@ -16,8 +16,12 @@ import { buatSql } from '../src/server/db.ts'
 import { Galat } from '../src/server/galat.ts'
 import {
   ambilPekerjaan, bayarKasbon, berjudi, berobat, catat, kantorWalikota, makanPadang, keadaan, kerja, klaimBonus, kuliah, kursus, lahan, muat, numpang, pasar, pilihHunian,
-  tabungan, terbang, usaha, infoKota, tetapkanUmk, pilihSekolah, AKSI_LOG_SIMPAN_MS,
+  tabungan, terbang, usaha, infoKota, tetapkanUmk, pilihSekolah, AKSI_LOG_SIMPAN_MS, namaBangunan,
 } from '../src/server/game.ts'
+import { bacaRuang, bacaUtas, daftarPercakapan, kirimPribadi, kirimRuang, ruangSaya } from '../src/server/obrolan.ts'
+import { hargaBangunan, konteksHarga, properti } from '../src/server/properti.ts'
+import { milikKota } from '../src/server/sistem-aturan.ts'
+import { cariWarga, inventori, teman } from '../src/server/sistem.ts'
 import { edisiTanggal, galatEdisi, segarkanKoran, terbaru, terbit } from '../src/server/koran.ts'
 import { bungkus, literal } from '../src/server/kueri.ts'
 import { lahanKosong, penempatan } from '../src/data/tataletak.ts'
@@ -385,6 +389,125 @@ uji('lapar: pemain yang lama pergi dirawat selagi pergi, ditagih sekali, dan tid
   k = await klaimBonus(sql, id, kunci(), t)
   assert.equal(k.kas, kas + BONUS_HARIAN)
   assert.equal((await jenisLedger(id)).filter((l) => l.jenis === 'rawat_inap').length, 1)
+})
+
+// ---------------------------------------------------------------- obrolan, teman, hadiah, kepemilikan bangunan (migrasi 009)
+
+uji('obrolan: ruang global untuk semua, ruang gedung hanya penghuninya, batas laju per menit', async () => {
+  const a = await mulai(await baru())
+  const b = await mulai(await baru())
+  await sql`update warga set hunian_tempat = 'rusun-weton-1' where id = ${a}`
+  assert.deepEqual((await ruangSaya(sql, a)).map((r) => r.id), ['global', 'hunian:rusun-weton-1'])
+  assert.deepEqual((await ruangSaya(sql, b)).map((r) => r.id), ['global'])
+  const { id } = await kirimRuang(sql, a, 'global', 'Halo kota', T0)
+  const r = await bacaRuang(sql, b, 'global', id - 1)
+  assert.deepEqual(r.pesan.map((p) => [p.isi, p.dari.id, p.saya]), [['Halo kota', a, false]])
+  await kirimRuang(sql, a, 'hunian:rusun-weton-1', 'Halo tetangga', T0)
+  await galat('ruang_ditolak', kirimRuang(sql, b, 'hunian:rusun-weton-1', 'nyusup', T0))
+  await galat('ruang_ditolak', bacaRuang(sql, b, 'hunian:rusun-weton-1'))
+  await galat('ruang_tidak_ada', bacaRuang(sql, b, 'rahasia'))
+  await galat('pesan_tidak_valid', kirimRuang(sql, b, 'global', '   ', T0))
+  for (let i = 0; i < OBROLAN.perMenitMaks; i++) await kirimRuang(sql, b, 'global', `pesan ${i}`, T0)
+  await galat('terlalu_cepat', kirimRuang(sql, b, 'global', 'satu lagi', T0))
+  await kirimRuang(sql, b, 'global', 'semenit kemudian', sesudah(menit(1) + 1000))
+})
+
+uji('pesan pribadi: ke siapa pun, utas berurutan, dibaca saat utas dibuka, daftar percakapan', async () => {
+  const a = await mulai(await baru())
+  const b = await mulai(await baru())
+  await kirimPribadi(sql, a, b, 'Hai, bukan teman tapi boleh menyapa', T0)
+  await kirimPribadi(sql, b, a, 'Hai juga', sesudah(1000))
+  await galat('pesan_sendiri', kirimPribadi(sql, a, a, 'diri sendiri', T0))
+  await galat('warga_tidak_ada', kirimPribadi(sql, a, randomUUID(), 'siapa', T0))
+  let [c] = await daftarPercakapan(sql, a)
+  assert.equal(c.dengan.id, b)
+  assert.equal(c.terakhir.isi, 'Hai juga')
+  assert.equal(c.belum, 1)
+  const u = await bacaUtas(sql, a, b)
+  assert.deepEqual(u.pesan.map((p) => [p.isi, p.saya, p.baru]), [['Hai, bukan teman tapi boleh menyapa', true, false], ['Hai juga', false, true]])
+  assert.equal(u.dengan.teman, 'belum')
+  ;[c] = await daftarPercakapan(sql, a)
+  assert.equal(c.belum, 0)
+  assert.equal((await muat(sql, b, T0)).pesanBaru, 1)
+})
+
+uji('cari warga: menurut nama, beserta status pertemanan; % dicari apa adanya', async () => {
+  const a = await mulai(await baru())
+  const b = await mulai(await baru())
+  await sql`update warga set nama = ${'Sulastri 100% Unik ' + nomor} where id = ${b}`
+  let hasil = await cariWarga(sql, a, `100% Unik ${nomor}`)
+  assert.deepEqual(hasil.map((x) => [x.id, x.status]), [[b, 'belum']])
+  await teman(sql, a, kunci(), { aksi: 'tambah', warga: b }, T0)
+  hasil = await cariWarga(sql, a, `Unik ${nomor}`)
+  assert.equal(hasil[0].status, 'diminta')
+  assert.equal((await cariWarga(sql, b, '%')).some((x) => x.id === b), false)
+})
+
+uji('hadiah: kirim barang ke warga lain paling banyak 3 kali per tanggal WIB, tercatat di utas pribadi', async () => {
+  const a = await mulai(await baru())
+  const b = await mulai(await baru())
+  await suntik(a, 1_000_000, T0)
+  await pasar(sql, a, kunci(), { aksi: 'beli_npc', barang: 'ikan', jumlah: 5 }, T0)
+  let k = await muat(sql, a, T0)
+  assert.equal(k.hadiahSisa, HADIAH.kaliPerHari)
+  for (let i = 0; i < HADIAH.kaliPerHari; i++) k = await inventori(sql, a, kunci(), { aksi: 'kirim', ke: b, barang: 'ikan', jumlah: 1 }, T0)
+  assert.equal(k.hadiahSisa, 0)
+  await galat('hadiah_habis', inventori(sql, a, kunci(), { aksi: 'kirim', ke: b, barang: 'ikan', jumlah: 1 }, T0))
+  assert.equal((await muat(sql, b, T0)).gudang.ikan, HADIAH.kaliPerHari)
+  assert.equal((await bacaUtas(sql, b, a)).pesan.length, HADIAH.kaliPerHari)
+  // tengah malam WIB membuka lagi
+  k = await inventori(sql, a, kunci(), { aksi: 'kirim', ke: b, barang: 'ikan', jumlah: 1 }, sesudah(hari(1)))
+  assert.equal(k.hadiahSisa, HADIAH.kaliPerHari - 1)
+})
+
+uji('bangunan: milik kota tidak dijual, bangunan NPC dibeli dengan harga tanah + bangunan, diberi nama, harga naik bila ramai', async () => {
+  const kafe = penempatan.find((p) => p.jenis === 'kafe')
+  if (!kafe) return console.log('         (dilewati: tata letak aktif tidak punya kafe)')
+  const balai = penempatan.find((p) => p.jenis === 'balai-kota')!
+  assert.equal(milikKota('balai-kota'), true)
+  assert.equal(milikKota('kafe'), false)
+  const id = await mulai(await baru())
+  await suntik(id, 100_000_000, T0)
+  await galat('properti_tidak_ada', properti(sql, id, kunci(), { aksi: 'beli_npc', properti: balai.id }, T0))
+  const kh = await konteksHarga(bungkus(sql))
+  const h = hargaBangunan(kafe.id, kh)
+  assert.equal(h.harga, h.tanah + h.bangunan)
+  // makin ramai, makin mahal
+  const ramai = hargaBangunan(kafe.id, { ...kh, ramai: new Map([[kafe.id, 10]]) })
+  assert.ok(ramai.bangunan > h.bangunan && ramai.faktorRamai > 1)
+  let k = await properti(sql, id, kunci(), { aksi: 'beli_npc', properti: kafe.id }, T0)
+  assert.equal(k.kas, MODAL_AWAL + 100_000_000 - h.harga)
+  const lain = await mulai(await baru())
+  await suntik(lain, 100_000_000, T0)
+  await galat('sudah_terjual', properti(sql, lain, kunci(), { aksi: 'beli_npc', properti: kafe.id }, T0))
+  await galat('nama_tidak_valid', properti(sql, id, kunci(), { aksi: 'nama', lahan: kafe.id, nama: 'Ab' }, T0))
+  k = await properti(sql, id, kunci(), { aksi: 'nama', lahan: kafe.id, nama: '  Kafe <Senja>  Weton ' }, T0)
+  assert.equal((await namaBangunan(sql))[kafe.id], 'Kafe Senja Weton')
+  await galat('bukan_milik', properti(sql, await mulai(await baru()), kunci(), { aksi: 'nama', lahan: kafe.id, nama: 'Punyaku' }, T0))
+})
+
+uji('bangunan: pemilik mendapat bagi hasil upah pekerja dan hasil dasar per siklus, cair saat ia beraksi', async () => {
+  const warung = penempatan.filter((p) => p.jenis === 'warung-pantai')
+  if (!warung.length) return console.log('         (dilewati: tata letak aktif tidak punya warung pantai)')
+  const pemilik = await mulai(await baru())
+  await suntik(pemilik, 100_000_000, T0)
+  const k0 = await properti(sql, pemilik, kunci(), { aksi: 'beli_npc', properti: warung[0].id }, T0)
+  const hargaBeli = MODAL_AWAL + 100_000_000 - k0.kas
+  const pekerja = await mulai(await baru())
+  await ambilPekerjaan(sql, pekerja, kunci(), 'pelayan-warung', T0, warung[0].id)
+  const kp = await kerja(sql, pekerja, kunci(), 5, T0)
+  const upah = kp.kas - MODAL_AWAL
+  // pekerja tidak dipotong; pemilik mendapat 10% dari kas kota saat beraksi berikutnya (hasil dasar belum, baru sejam)
+  assert.equal(upah, upahAksi(pekerjaanById('pelayan-warung')!, 1, 5))
+  let k = await muat(sql, pemilik, sesudah(menit(30)))
+  assert.equal(k.kas, k0.kas + Math.round(upah * BANGUNAN_MILIK.bagiUpah))
+  // sehari kemudian: hasil dasar sebanding dengan waktu
+  k = await muatKenyang(pemilik, sesudah(hari(1)))
+  const dasar = Math.floor((hargaBeli * BANGUNAN_MILIK.hasilDasarPerSiklus * hari(1)) / SIKLUS_MS)
+  assert.equal(k.kas, k0.kas + Math.round(upah * BANGUNAN_MILIK.bagiUpah) + dasar)
+  assert.equal((await jenisLedger(pemilik)).filter((l) => l.jenis === 'hasil_properti').length, 2)
+  // muat lagi seketika tidak menambah apa pun
+  assert.equal((await muat(sql, pemilik, sesudah(hari(1)))).kas, k.kas)
 })
 
 // ---------------------------------------------------------------- kursus, bonus

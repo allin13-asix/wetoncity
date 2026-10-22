@@ -70,6 +70,8 @@ export type Warga = {
   latihan_selesai: Date | null
   latihan_jeda: Date | null
   profil_properti: boolean
+  hadiah_tanggal: string | null
+  hadiah_kali: number
   pancing: SesiPancing | null
   /** bukan kolom warga: UMK yang berlaku, diisi saat transaksi dimulai */
   umk: number
@@ -96,6 +98,7 @@ export type BarisLahan = {
   jenis_objek: 'lahan' | 'bangunan'
   bangun_jenis: string | null; bangun_mulai: Date | null; bangun_selesai: Date | null
   jual_mode: 'tidak' | 'tetap' | 'negosiasi'; jual_harga: number | null
+  nama_kustom: string | null; harga_beli: number | null; hasil_pada: Date | null
 }
 export type BarisNumpang = {
   id: string; pemilik_id: string; penumpang_id: string; uang_dapur: number; status: 'minta' | 'aktif' | 'selesai'
@@ -187,6 +190,10 @@ export type Keadaan = {
   inventori: { dipakai: number; kapasitas: number }
   suratBaru: number
   permintaanTeman: number
+  /** pesan pribadi yang belum dibaca */
+  pesanBaru: number
+  /** sisa kirim hadiah barang ke warga lain hari ini */
+  hadiahSisa: number
   wajibPindah: { tenggat: string; dari: string } | null
   gantiKerja: { sisa: number; maks: number; jedaSampai: string | null }
   seleksi: { lulus: string[]; gagal: Record<string, string> }

@@ -8,6 +8,7 @@ import { jenisById, kategori } from '@/data/bangunan'
 import { distrik, lahanKosong, penempatan, pusatDistrik } from '@/data/tataletak'
 import type { Penempatan } from '@/data/tipe'
 import { bahanPadat, malam, pasangNyala } from './bahan'
+import { useDataPeta, type RumahPeta } from '@/ui/namaBangunan'
 import { Label, grupTabrakan } from './Label'
 
 const rad = (rot: number) => (rot * Math.PI) / 180
@@ -229,20 +230,11 @@ function Penanda({ p }: { p: Penempatan }) {
   )
 }
 
-type BangunanWarga = { lahan: string; nama: string; jenis: string; bangun: string; progres: number; tahap: number; tahapNama: string; tampil: number }
-
 /**
  * Bangunan warga di lahan milik mereka, diambil dari /api/peta/rumah. Selama konstruksi, tinggi bangunan mengikuti bagian yang
  * terlihat pada tahapnya (0-10%, 25-50%, 80-90%, lalu utuh saat selesai).
  */
-function RumahWarga({ onPilih }: { onPilih: (id: string) => void }) {
-  const [rumah, setRumah] = useState<BangunanWarga[]>([])
-  useEffect(() => {
-    const muat = () => fetch('/api/peta/rumah', { cache: 'no-store' }).then((r) => r.json()).then((d) => setRumah(d.rumah ?? [])).catch(() => {})
-    muat()
-    const t = setInterval(muat, 60_000)
-    return () => clearInterval(t)
-  }, [])
+function RumahWarga({ onPilih, rumah }: { onPilih: (id: string) => void; rumah: RumahPeta[] }) {
   return (
     <>
       {rumah.map((r) => {
@@ -305,27 +297,30 @@ function LahanKlik({ terpilih, onPilih }: { terpilih: string | null; onPilih: (i
 const tabrakanDistrik = grupTabrakan()
 
 export function Isi({ terpilih, onPilih }: { terpilih: string | null; onPilih: (id: string) => void }) {
+  // rumah warga dan nama bangunan buatan pemiliknya
+  const peta = useDataPeta()
+  const namaDi = (p: Penempatan) => peta.nama[p.id] ?? jenisById.get(p.jenis)!.nama
   const dipilih = terpilih ? penempatan.find((p) => p.id === terpilih) : undefined
   const lahanDipilih = terpilih ? lahanKosong.find((l) => l.id === terpilih) : undefined
   return (
     <>
       <LahanKlik terpilih={terpilih} onPilih={onPilih} />
       {lahanDipilih && <Label teks={lahanDipilih.id} posisi={[lahanDipilih.x, 3, lahanDipilih.z]} px={13} latar="#0c3446" huruf="#ffffff" />}
-      <RumahWarga onPilih={onPilih} />
+      <RumahWarga onPilih={onPilih} rumah={peta.rumah} />
       {penempatan.map((p) => (
         <Bangunan key={p.id} p={p} terpilih={p.id === terpilih} onPilih={onPilih} />
       ))}
       {penempatan
         .filter((p) => p.id !== terpilih && jenisById.get(p.jenis)!.utama && !jenisById.get(p.jenis)!.diLaut)
         .map((p) => (
-          <Label key={`l-${p.id}`} teks={jenisById.get(p.jenis)!.nama} posisi={[p.x, tinggiPenempatan(p) + 0.4, p.z]} px={12} zoomMin={19} />
+          <Label key={`l-${p.id}`} teks={namaDi(p)} posisi={[p.x, tinggiPenempatan(p) + 0.4, p.z]} px={12} zoomMin={19} />
         ))}
       {distrik.map((d) => {
         const c = pusatDistrik.get(d.id)
         if (!c) return null
         return <Label key={`d-${d.id}`} teks={d.singkat} posisi={[c.x, 3.5, c.z]} px={13} latar={KUNING} huruf="#1b1500" zoomMaks={17} tabrakan={tabrakanDistrik} />
       })}
-      {dipilih && <Label teks={jenisById.get(dipilih.jenis)!.nama} posisi={[dipilih.x, tinggiPenempatan(dipilih) + 3.3, dipilih.z]} px={13} latar="#0c3446" huruf="#ffffff" />}
+      {dipilih && <Label teks={namaDi(dipilih)} posisi={[dipilih.x, tinggiPenempatan(dipilih) + 3.3, dipilih.z]} px={13} latar="#0c3446" huruf="#ffffff" />}
       {dipilih && <Penanda p={dipilih} />}
     </>
   )

@@ -1,13 +1,14 @@
 'use client'
 
-// Profil publik pemain dan kotak pesan. Hanya data publik yang ditampilkan: nama, level, reputasi dan peringkat, pekerjaan,
+// Profil publik pemain. Hanya data publik yang ditampilkan: nama, level, reputasi dan peringkat, pekerjaan,
 // keahlian dan atribut, serta properti (opsional). Uang, inventori, dan stats survival tidak pernah dikirim server.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { NAMA_ATRIBUT } from '@/data/balans'
 import { rupiah } from '@/data/ekonomi'
-import { kunciBaru, panggil } from './api'
+import { panggil } from './api'
+import { KirimHadiah } from './Hadiah'
 import { useKeadaan } from './keadaan'
 
 type Profil = {
@@ -34,8 +35,7 @@ export default function ProfilPublik({ id }: { id: string }) {
   const st = useKeadaan()
   const [p, setP] = useState<Profil | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
-  const [pesan, setPesan] = useState('')
-  const [terkirim, setTerkirim] = useState<string | null>(null)
+  const [hadiah, setHadiah] = useState(false)
 
   const muat = useCallback(async () => {
     const r = await panggil<Profil>(`/api/profil?id=${encodeURIComponent(id)}`)
@@ -50,14 +50,6 @@ export default function ProfilPublik({ id }: { id: string }) {
 
   if (galat) return <main className="halaman"><p className="pesan galat">{galat}</p></main>
   if (!p) return <main className="halaman"><p className="kosong">Memuat profil</p></main>
-
-  async function kirim() {
-    const r = await panggil('/api/pesan', { ke: p!.id, isi: pesan, kunci: kunciBaru() })
-    if (r.ok) {
-      setPesan('')
-      setTerkirim('Pesan terkirim.')
-    } else setTerkirim(r.galat.pesan)
-  }
 
   return (
     <main className="halaman profil">
@@ -141,15 +133,11 @@ export default function ProfilPublik({ id }: { id: string }) {
               ) : (
                 <p className="catatan">Tidak ada properti yang terbuka untuk ditawar.</p>
               )}
-              <h3 className="sub">Kirim pesan</h3>
-              <label className="tulis-label">
-                Pesan untuk {p.nama}
-                <textarea value={pesan} maxLength={300} rows={3} onChange={(e) => setPesan(e.target.value)} />
-              </label>
               <div className="baris-aksi rata-kiri">
-                <button type="button" className="tombol-sekunder" disabled={!pesan.trim()} onClick={kirim}>Kirim pesan</button>
+                <Link className="tombol-sekunder" href={`/pesan?dengan=${p.id}`}>Kirim pesan</Link>
+                <button type="button" className="tombol-sekunder" onClick={() => setHadiah(true)}>Kirim hadiah</button>
               </div>
-              {terkirim && <p className="catatan">{terkirim}</p>}
+              {hadiah && <KirimHadiah ke={p} onTutup={() => setHadiah(false)} />}
             </section>
           )}
           {p.diri && (
@@ -161,57 +149,6 @@ export default function ProfilPublik({ id }: { id: string }) {
           )}
         </div>
       </div>
-    </main>
-  )
-}
-
-type Pesanan = Array<{ id: number; dari: { id: string; nama: string }; ke: { id: string; nama: string }; isi: string; masuk: boolean; baru: boolean; waktu: string }>
-
-/** Kotak pesan: pesan masuk dan keluar terbaru. */
-const PESAN_SEGAR_MS = 20_000
-
-export function KotakPesan() {
-  const [d, setD] = useState<Pesanan | null>(null)
-  const [galat, setGalat] = useState<string | null>(null)
-  useEffect(() => {
-    // server menandai pesan sudah dibaca saat dikirim, jadi tanda "Baru" dipertahankan di sini sampai halaman ditinggalkan
-    const muat = () =>
-      panggil<Pesanan>('/api/pesan').then((r) =>
-        r.ok ? setD((lama) => r.data.map((m) => ({ ...m, baru: m.baru || !!lama?.some((x) => x.id === m.id && x.baru) }))) : setGalat(r.galat.pesan),
-      )
-    muat()
-    // pesan baru masuk tanpa memuat ulang halaman: periksa berkala selama halaman terlihat, dan saat kembali ke halaman ini
-    const t = setInterval(() => document.visibilityState === 'visible' && muat(), PESAN_SEGAR_MS)
-    const segarkan = () => document.visibilityState === 'visible' && muat()
-    document.addEventListener('visibilitychange', segarkan)
-    return () => {
-      clearInterval(t)
-      document.removeEventListener('visibilitychange', segarkan)
-    }
-  }, [])
-  return (
-    <main className="halaman">
-      <div className="beranda-kepala">
-        <h1>Pesan</h1>
-        <Link className="tombol-sekunder" href="/beranda">Beranda</Link>
-      </div>
-      {galat && <p className="pesan galat">{galat}</p>}
-      {d && d.length === 0 && <p className="catatan">Belum ada pesan. Buka profil warga lain untuk mengirim pesan.</p>}
-      <ul className="lowongan">
-        {(d ?? []).map((m) => (
-          <li key={m.id}>
-            <span>
-              <strong>
-                {m.masuk ? 'Dari ' : 'Ke '}
-                <Link className="tautan" href={`/profil/${m.masuk ? m.dari.id : m.ke.id}`}>{m.masuk ? m.dari.nama : m.ke.nama}</Link>
-                {m.baru && <span className="baru"> Baru</span>}
-              </strong>
-              <small>{new Date(m.waktu).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
-              <span>{m.isi}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
     </main>
   )
 }
