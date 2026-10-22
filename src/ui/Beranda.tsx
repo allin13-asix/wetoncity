@@ -1,16 +1,19 @@
 'use client'
 
-// Beranda pemain: KTP Kota, info karakter, dan menu yang tidak ada di peta (riwayat uang, gudang, properti,
-// kamar tamu, pengingat, Kantor Wali Kota). Semua aksi di bangunan dilakukan dari peta.
+// Beranda pemain, disusun dari yang paling sering dilihat: profil ringkas, hal yang perlu perhatian, kondisi tubuh,
+// angka keuangan dan karier, pintasan, lalu rincian yang dilipat (tagihan, level dan atribut, KTP, riwayat uang).
+// Semua aksi di bangunan dilakukan dari peta.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { rupiah } from '@/data/ekonomi'
 import { penempatanById } from '@/data/tataletak'
-import { BARANG, adalahBarang, tanggalPanjang } from '@/server/aturan'
+import { tanggalPanjang } from '@/server/aturan'
+import { sedangLapar } from '@/server/sistem-aturan'
 import type { BarisLedger } from '@/server/tipe'
 import { lamaWaktu, panggil } from './api'
 import { BannerPerjalanan, Numpang } from './FiturKota'
+import { Bank, Bintang, Dompet, Keluar, Koper, Koran, Kotak, Mangkuk, Nota, Obrolan, Orang, Palang, Petir, Piala, Seru, Toga, Toko, Utang } from './ikon'
 import { Kondisi, Teman } from './Kehidupan'
 import KebijakanUmk from './KebijakanUmk'
 import { useKeadaan } from './keadaan'
@@ -37,21 +40,62 @@ const waktu = (iso: string) => new Date(iso).toLocaleString('id-ID', { day: 'num
 const nik = (id: string) => `3577 ${id.replace(/[^0-9a-f]/g, '').slice(0, 12).replace(/[a-f]/g, (c) => String(c.charCodeAt(0) % 10)).replace(/(\d{4})(?=\d)/g, '$1 ')}`
 const namaTempat = (id: string | null | undefined) => (id ? penempatanById.get(id)?.jenis : undefined)
 
-function Meter({ nama, nilai, maks, kelas }: { nama: string; nilai: number; maks: number; kelas: string }) {
+const jam = (iso: string) => new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+
+/** Satu bar kondisi tubuh: ikon, nama, angka, dan keterangan singkat. */
+function Bar({ ikon, nama, nilai, maks, kelas, ket }: { ikon: ReactNode; nama: string; nilai: number; maks: number; kelas: string; ket?: string }) {
   return (
-    <div className={`meter ${kelas}`}>
-      <div className="meter-kepala">
-        <span>{nama}</span>
-        <strong>
-          {nilai} / {maks}
-        </strong>
-      </div>
-      <div className="meter-rel" role="meter" aria-label={nama} aria-valuemin={0} aria-valuemax={maks} aria-valuenow={nilai}>
-        <span style={{ width: `${(nilai / maks) * 100}%` }} />
-      </div>
+    <div className={`bar ${kelas}`}>
+      <span className="bar-ikon">{ikon}</span>
+      <span className="bar-nama">
+        {nama}
+        {ket && <small>{ket}</small>}
+      </span>
+      <span className="bar-rel" role="meter" aria-label={nama} aria-valuemin={0} aria-valuemax={maks} aria-valuenow={nilai}>
+        <i style={{ width: `${Math.min(100, (nilai / maks) * 100)}%` }} />
+      </span>
+      <strong>{nilai}</strong>
     </div>
   )
 }
+
+/** Satu angka penting dengan ikon. */
+function Ubin({ ikon, label, nilai, ket, merah = false }: { ikon: ReactNode; label: string; nilai: string; ket?: string; merah?: boolean }) {
+  return (
+    <div className={`ubin${merah ? ' merah' : ''}`}>
+      <span className="ubin-ikon">{ikon}</span>
+      <span className="ubin-label">{label}</span>
+      <strong>{nilai}</strong>
+      {ket && <small>{ket}</small>}
+    </div>
+  )
+}
+
+function Pintasan({ href, ikon, label, lencana = 0 }: { href: string; ikon: ReactNode; label: string; lencana?: number | string }) {
+  return (
+    <Link href={href}>
+      {ikon}
+      <span>{label}</span>
+      {lencana ? <b className="lencana">{lencana}</b> : null}
+    </Link>
+  )
+}
+
+const barisRiwayat = (r: BarisLedger) => (
+  <li key={r.id}>
+    <span>
+      <strong>{labelLedger[r.jenis] ?? r.jenis}</strong>
+      <small>
+        {waktu(r.waktu)}
+        {r.akun === 'kasbon' ? ', kasbon' : r.akun === 'tabungan' ? ', tabungan' : ''}
+      </small>
+    </span>
+    <span className={r.jumlah > 0 ? (r.akun === 'kasbon' ? 'minus' : 'plus') : r.akun === 'kasbon' ? 'plus' : 'minus'}>
+      {r.jumlah > 0 ? '+' : '-'}
+      {rupiah(Math.abs(r.jumlah))}
+    </span>
+  </li>
+)
 
 export default function Beranda() {
   const router = useRouter()
@@ -87,73 +131,110 @@ export default function Beranda() {
   if (!k || !k.hunian) return <main className="halaman beranda"><p className="kosong">{st.pesan ? st.pesan.teks : 'Memuat'}</p></main>
 
   const p = { k, tenaga: st.tenaga, bebas: st.bebas, kini: st.kini, lakukan: st.lakukan }
-  const gudang = Object.entries(k.gudang).filter(([id]) => adalahBarang(id))
-  const koleksi = gudang.filter(([id]) => BARANG[id as keyof typeof BARANG].jenis === 'koleksi')
-  const lain = gudang.filter(([id]) => BARANG[id as keyof typeof BARANG].jenis !== 'koleksi')
   const tempatKerja = k.pekerjaan ? k.lowongan.find((l) => l.id === k.pekerjaan!.id)?.tempatNama : undefined
   const jenisRumah = namaTempat(k.hunian.tempat)
+  const alamat = `${k.hunian.nama}${jenisRumah && k.hunian.tempat !== null ? `, gedung ${k.hunian.tempat.replace(/^.*-(\d+)$/, '$1')}` : ''}`
+  const inisial = k.warga.nama.split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase()).join('')
+  const sisaTagihan = k.tagihan ? Math.max(0, Date.parse(k.tagihan.jatuhTempo) - st.kini.getTime()) : 0
+  const lapar = k.peran !== 'walikota' && sedangLapar(st.lapar)
+  const koranBaru = !!k.koran && dibaca !== null && k.koran.tanggal > dibaca
+
+  // yang perlu ditindaklanjuti pemain, paling penting dulu; tampil hanya bila ada
+  const perhatian: Array<{ teks: string; href?: string; merah?: boolean }> = []
+  if (k.dirawat) perhatian.push({ teks: `Dirawat di RSUD karena kelaparan sampai ${jam(k.dirawat.sampai)}.`, merah: true })
+  else if (lapar) perhatian.push({ teks: 'Kamu lapar: Tenaga pulih lebih lambat. Makan di RM Padang atau pakai makanan dari Inventori.', href: '/inventori', merah: true })
+  if (k.kesehatan.sakit) perhatian.push({ teks: 'Kamu sakit: Tenaga pulih dua kali lebih lambat. Berobat di RSUD.', merah: true })
+  if (k.wajibPindah) perhatian.push({ teks: `Wajib pindah tempat tinggal sebelum ${waktu(k.wajibPindah.tenggat)}.`, merah: true })
+  if (k.kasbonMacet) perhatian.push({ teks: `Kasbon macet ${rupiah(k.kasbon)}: Tenaga pulih lebih lambat. Lunasi di Bank Weton.`, merah: true })
+  if (k.tagihan && k.peran !== 'walikota' && sisaTagihan < 24 * 3_600_000 && k.kas < k.tagihan.total) {
+    perhatian.push({ teks: `Tagihan ${rupiah(k.tagihan.total)} jatuh tempo ${lamaWaktu(sisaTagihan)} lagi, uangmu kurang. Selisihnya menjadi kasbon.` })
+  }
+  if (k.suratBaru > 0) perhatian.push({ teks: `${k.suratBaru} surat menunggu di mailbox.`, href: '/inventori' })
+  if (k.permintaanTeman > 0) perhatian.push({ teks: `${k.permintaanTeman} permintaan pertemanan menunggu jawabanmu (lihat Teman di bawah).` })
 
   return (
     <main className="halaman beranda">
-      <div className="beranda-kepala">
-        <h1>Beranda</h1>
-        <div className="baris-aksi">
-          <Link className="tombol-utama" href="/">Ke peta</Link>
-          <button type="button" className="tombol-sekunder" onClick={keluar}>Keluar</button>
+      <header className="profil-ringkas">
+        <span className="profil-avatar" aria-hidden="true">
+          {inisial}
+          <b>{k.level.nilai}</b>
+        </span>
+        <div>
+          <h1>{k.warga.nama}</h1>
+          <p>
+            {k.peran === 'walikota' ? 'Wali Kota Weton' : `Level ${k.level.nilai}`} · {alamat}
+            <br />
+            {k.pekerjaan ? `${k.pekerjaan.nama}${tempatKerja ? `, ${tempatKerja}` : ''}` : 'Belum bekerja'}
+          </p>
         </div>
-      </div>
-
-      <section className="ktp" aria-label="KTP Kota Weton">
-        <header className="ktp-kepala">
-          <span>Pemerintah Kota Weton</span>
-          <strong>Kartu Tanda Penduduk Kota</strong>
-        </header>
-        <div className="ktp-badan">
-          <div className="ktp-foto" aria-hidden="true">
-            {k.warga.nama.split(/\s+/).slice(0, 2).map((x) => x[0]?.toUpperCase()).join('')}
-          </div>
-          <dl className="ktp-data">
-            <div><dt>NIK</dt><dd className="ktp-nik">{nik(k.warga.id)}</dd></div>
-            <div><dt>Nama</dt><dd className="ktp-nama">{k.warga.nama}</dd></div>
-            <div><dt>Status</dt><dd>{k.peran === 'walikota' ? 'Wali Kota Weton' : 'Warga Weton'}</dd></div>
-            <div><dt>Alamat</dt><dd>{k.hunian.nama}{jenisRumah && k.hunian.tempat !== null ? `, gedung ${k.hunian.tempat.replace(/^.*-(\d+)$/, '$1')}` : ''}</dd></div>
-            <div><dt>Pendidikan</dt><dd>{k.ijazah ? `${k.ijazah.nama}` : k.sekolah?.nama ?? '-'}</dd></div>
-            <div><dt>Pekerjaan</dt><dd>{k.pekerjaan ? `${k.pekerjaan.nama}${tempatKerja ? `, ${tempatKerja}` : ''}` : 'Belum bekerja'}</dd></div>
-            <div><dt>Berlaku sejak</dt><dd>{tanggal(k.warga.bergabung)}</dd></div>
-          </dl>
-        </div>
-      </section>
+        <button type="button" className="ikon-tombol" aria-label="Keluar" title="Keluar" onClick={keluar}>
+          <Keluar />
+        </button>
+      </header>
 
       {st.pesan && <p className={`pesan ${st.pesan.ok ? 'ok' : 'galat'}`} role="status">{st.pesan.teks}</p>}
       <BannerPerjalanan k={k} kini={st.kini} />
 
+      {perhatian.length > 0 && (
+        <section className="perhatian" aria-label="Perlu perhatian">
+          {perhatian.map((x) => {
+            const isi = (
+              <>
+                <Seru />
+                <span>{x.teks}</span>
+              </>
+            )
+            return x.href ? (
+              <Link key={x.teks} href={x.href} className={x.merah ? 'merah' : undefined}>{isi}</Link>
+            ) : (
+              <p key={x.teks} className={x.merah ? 'merah' : undefined}>{isi}</p>
+            )
+          })}
+        </section>
+      )}
+
+      <section className="panel status-bar" aria-label="Kondisi tubuh">
+        <Bar ikon={<Petir />} nama="Tenaga" nilai={st.tenaga} maks={k.tenaga.maks} kelas="b-tenaga" ket={st.penuhDalam > 0 ? `penuh ${lamaWaktu(st.penuhDalam)} lagi` : 'penuh'} />
+        <Bar ikon={<Palang />} nama="Kesehatan" nilai={st.kesehatan} maks={k.kesehatan.maks} kelas={k.kesehatan.sakit ? 'b-bahaya' : 'b-sehat'} ket={k.kesehatan.sakit ? 'sakit' : undefined} />
+        <Bar ikon={<Mangkuk />} nama="Lapar" nilai={st.lapar} maks={k.lapar.maks} kelas={lapar ? 'b-bahaya' : 'b-kenyang'} ket={lapar ? 'lapar' : undefined} />
+      </section>
+
+      <section className="ubin-grid" aria-label="Keuangan dan karier">
+        <Ubin ikon={<Dompet />} label="Uang" nilai={rupiah(k.kas)} />
+        <Ubin ikon={<Bank />} label="Tabungan" nilai={rupiah(k.tabungan)} />
+        {k.kasbon > 0 && <Ubin ikon={<Utang />} label={k.kasbonMacet ? 'Kasbon (macet)' : 'Kasbon'} nilai={rupiah(k.kasbon)} merah />}
+        {k.tagihan && k.peran !== 'walikota' && <Ubin ikon={<Nota />} label="Tagihan" nilai={rupiah(k.tagihan.total)} ket={`${lamaWaktu(sisaTagihan)} lagi`} />}
+        <Ubin ikon={<Koper />} label="Gaji sebulan" nilai={k.pekerjaan ? rupiah(k.pekerjaan.gajiBulan) : '-'} ket={k.pekerjaan ? undefined : 'cari di Bursa Kerja'} />
+        <Ubin ikon={<Bintang />} label="Keahlian" nilai={`${k.keahlian} / 10`} ket={k.latihan ? `kursus selesai ${lamaWaktu(Date.parse(k.latihan.selesai) - st.kini.getTime())} lagi` : undefined} />
+        {k.kuliah && <Ubin ikon={<Toga />} label="Kuliah" nilai={`Semester ${k.kuliah.semester}`} ket={k.kuliah.jurusan.nama} />}
+      </section>
+
+      <nav className="pintasan" aria-label="Pintasan">
+        <Pintasan href="/inventori" ikon={<Kotak />} label="Inventori" lencana={k.suratBaru} />
+        <Pintasan href="/pasar" ikon={<Toko />} label="Pasar" />
+        <Pintasan href="/pesan" ikon={<Obrolan />} label="Pesan" />
+        <Pintasan href={`/profil/${k.warga.id}`} ikon={<Orang />} label="Profilku" />
+        <Pintasan href="/peringkat" ikon={<Piala />} label="Peringkat" />
+        <Pintasan href="/koran" ikon={<Koran />} label="Koran" lencana={koranBaru ? 'Baru' : 0} />
+      </nav>
+
       <div className="beranda-grid">
         <div className="kolom">
-          <section className="panel">
-            <h2>Karakter</h2>
-            <Meter nama="Tenaga" nilai={st.tenaga} maks={k.tenaga.maks} kelas="tenaga" />
-            <p className="catatan">{st.penuhDalam > 0 ? `Penuh dalam ${lamaWaktu(st.penuhDalam)}.` : 'Penuh.'} Pulih 10 poin per jam.</p>
-            <Meter nama="Kesehatan" nilai={st.kesehatan} maks={k.kesehatan.maks} kelas={k.kesehatan.sakit ? 'sehat sakit' : 'sehat'} />
-            <p className="catatan">
-              {k.kesehatan.sakit ? 'Sedang sakit: Tenaga pulih dua kali lebih lambat. Berobat di RSUD.' : 'Turun 1 tiap aksi kerja, pulih 12 poin sehari. Di bawah 30 kamu sakit.'}
-            </p>
-            <dl className="rincian">
-              <div><dt>Keahlian</dt><dd>{k.keahlian} dari 10</dd></div>
-              <div><dt>Uang</dt><dd>{rupiah(k.kas)}</dd></div>
-              <div><dt>Tabungan</dt><dd>{rupiah(k.tabungan)}</dd></div>
-              {k.kasbon > 0 && <div><dt>Kasbon{k.kasbonMacet ? ' (macet)' : ''}</dt><dd>{rupiah(k.kasbon)}</dd></div>}
-              {k.pekerjaan && <div><dt>Gaji sebulan</dt><dd>{rupiah(k.pekerjaan.gajiBulan)}</dd></div>}
-              <div><dt>UMK Weton</dt><dd>{rupiah(k.umk)}</dd></div>
-              {k.kuliah && <div><dt>Kuliah</dt><dd>{k.kuliah.jurusan.nama}, semester {k.kuliah.semester}</dd></div>}
-            </dl>
-          </section>
+          {k.koran && (
+            <Link href="/koran" className="koran-ringkas">
+              <span className="koran-nama">
+                Koran Weton
+                {koranBaru && <span className="baru">Baru</span>}
+              </span>
+              <strong className="koran-judul">{k.koran.judul}</strong>
+              <span className="koran-tgl">{tanggalPanjang(k.koran.tanggal)}</span>
+            </Link>
+          )}
 
           {k.tagihan && k.peran !== 'walikota' && (
-            <section className="panel">
-              <h2>Tagihan bulan ini</h2>
-              <p>
-                Jatuh tempo {tanggal(k.tagihan.jatuhTempo)}, dalam {lamaWaktu(Math.max(0, Date.parse(k.tagihan.jatuhTempo) - st.kini.getTime()))}.
-              </p>
+            <details className="panel lipat">
+              <summary>Rincian tagihan</summary>
+              <p>Jatuh tempo {tanggal(k.tagihan.jatuhTempo)}.</p>
               <dl className="rincian">
                 <div><dt>Sewa</dt><dd>{rupiah(k.tagihan.sewa)}</dd></div>
                 <div><dt>Listrik</dt><dd>{rupiah(k.tagihan.listrik)}</dd></div>
@@ -162,50 +243,38 @@ export default function Beranda() {
                 <div><dt>Pajak penghasilan (perkiraan)</dt><dd>{rupiah(k.tagihan.pajak)}</dd></div>
                 <div className="jumlah"><dt>Total</dt><dd>{rupiah(k.tagihan.total)}</dd></div>
               </dl>
-              <p className="catatan">Bila uang kurang, selisihnya menjadi kasbon dengan bunga 10% per bulan. Bayar kasbon di Bank Weton.</p>
+              <p className="catatan">Bila uang kurang, selisihnya menjadi kasbon dengan bunga 10% per bulan. Bayar kasbon di Bank Weton. UMK Weton {rupiah(k.umk)}.</p>
               {k.hunianBerikut && <p className="catatan">Pindah ke {k.hunianBerikut.nama} berlaku mulai siklus berikutnya.</p>}
+            </details>
+          )}
+
+          <Kondisi k={k} />
+
+          <details className="panel lipat">
+            <summary>Kartu Tanda Penduduk Kota</summary>
+            <section className="ktp" aria-label="KTP Kota Weton">
+              <header className="ktp-kepala">
+                <span>Pemerintah Kota Weton</span>
+                <strong>Kartu Tanda Penduduk Kota</strong>
+              </header>
+              <div className="ktp-badan">
+                <div className="ktp-foto" aria-hidden="true">{inisial}</div>
+                <dl className="ktp-data">
+                  <div><dt>NIK</dt><dd className="ktp-nik">{nik(k.warga.id)}</dd></div>
+                  <div><dt>Nama</dt><dd className="ktp-nama">{k.warga.nama}</dd></div>
+                  <div><dt>Status</dt><dd>{k.peran === 'walikota' ? 'Wali Kota Weton' : 'Warga Weton'}</dd></div>
+                  <div><dt>Alamat</dt><dd>{alamat}</dd></div>
+                  <div><dt>Pendidikan</dt><dd>{k.ijazah ? `${k.ijazah.nama}` : k.sekolah?.nama ?? '-'}</dd></div>
+                  <div><dt>Pekerjaan</dt><dd>{k.pekerjaan ? `${k.pekerjaan.nama}${tempatKerja ? `, ${tempatKerja}` : ''}` : 'Belum bekerja'}</dd></div>
+                  <div><dt>Berlaku sejak</dt><dd>{tanggal(k.warga.bergabung)}</dd></div>
+                </dl>
+              </div>
             </section>
-          )}
+          </details>
 
-          {k.koran && (
-            <Link href="/koran" className="koran-ringkas">
-              <span className="koran-nama">
-                Koran Weton
-                {dibaca !== null && k.koran.tanggal > dibaca && <span className="baru">Baru</span>}
-              </span>
-              <strong className="koran-judul">{k.koran.judul}</strong>
-              <span className="koran-tgl">{tanggalPanjang(k.koran.tanggal)}</span>
-            </Link>
-          )}
-
-          <Kondisi k={k} kini={st.kini} />
-
-          <section className="panel">
-            <h2>Inventori dan mailbox</h2>
-            <p>
-              Inventori {k.inventori.dipakai} dari {k.inventori.kapasitas}. {k.suratBaru > 0 ? <strong>{k.suratBaru} surat menunggu di mailbox.</strong> : 'Mailbox kosong.'}
-            </p>
-            <Link className="tombol-sekunder" href="/inventori">Buka inventori</Link>
-          </section>
-
-          <section className="panel">
-            <h2>Gudang dan koleksi</h2>
-            {gudang.length === 0 ? (
-              <p className="catatan">Gudang kosong. Belanja di Pasar Weton.</p>
-            ) : (
-              <>
-                {lain.length > 0 && <p>{lain.map(([id, n]) => `${BARANG[id as keyof typeof BARANG].nama} ${n}`).join(', ')}</p>}
-                {koleksi.length > 0 && <p>Koleksi: {koleksi.map(([id, n]) => `${BARANG[id as keyof typeof BARANG].nama} ${n}`).join(', ')}</p>}
-              </>
-            )}
-            <Link className="tautan" href="/pasar">Buka Pasar Weton</Link>
-          </section>
-
-          <section className="panel">
-            <h2>Properti dan usaha</h2>
-            {k.lahan.length === 0 && k.usaha.length === 0 ? (
-              <p className="catatan">Belum punya lahan atau usaha. Beli lahan di Balai Kota, buka usaha di Dinas Ekonomi atau TPI.</p>
-            ) : (
+          {(k.lahan.length > 0 || k.usaha.length > 0) && (
+            <section className="panel">
+              <h2>Properti dan usaha</h2>
               <ul className="lowongan">
                 {k.lahan.map((l) => (
                   <li key={l.id}>
@@ -229,20 +298,12 @@ export default function Beranda() {
                   </li>
                 ))}
               </ul>
-            )}
-          </section>
+            </section>
+          )}
         </div>
 
         <div className="kolom">
           <Teman bebas={st.bebas} lakukan={st.lakukan} versi={st.versi} />
-          <section className="panel">
-            <h2>Profil publik</h2>
-            <p className="catatan">Warga lain melihat nama, level, reputasi dan peringkat, pekerjaan, keahlian, dan (bila kamu izinkan) properti. Uang, inventori, dan kondisi tubuhmu tidak pernah terlihat.</p>
-            <div className="baris-aksi">
-              <Link className="tombol-sekunder" href={`/profil/${k.warga.id}`}>Lihat profilku</Link>
-              <Link className="tombol-sekunder" href="/pesan">Pesan{k.permintaanTeman > 0 ? ` (${k.permintaanTeman} permintaan teman)` : ''}</Link>
-            </div>
-          </section>
           {k.punyaRumah && <Numpang {...p} />}
           <TombolPasang />
           <Pengingat />
@@ -283,23 +344,15 @@ export default function Beranda() {
             {riwayat.length === 0 ? (
               <p className="catatan">Belum ada catatan.</p>
             ) : (
-              <ul className="riwayat">
-                {riwayat.map((r) => (
-                  <li key={r.id}>
-                    <span>
-                      <strong>{labelLedger[r.jenis] ?? r.jenis}</strong>
-                      <small>
-                        {waktu(r.waktu)}
-                        {r.akun === 'kasbon' ? ', kasbon' : r.akun === 'tabungan' ? ', tabungan' : ''}
-                      </small>
-                    </span>
-                    <span className={r.jumlah > 0 ? (r.akun === 'kasbon' ? 'minus' : 'plus') : r.akun === 'kasbon' ? 'plus' : 'minus'}>
-                      {r.jumlah > 0 ? '+' : '-'}
-                      {rupiah(Math.abs(r.jumlah))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="riwayat">{riwayat.slice(0, 5).map(barisRiwayat)}</ul>
+                {riwayat.length > 5 && (
+                  <details className="lipat-dalam">
+                    <summary>Lihat {riwayat.length - 5} catatan lainnya</summary>
+                    <ul className="riwayat">{riwayat.slice(5).map(barisRiwayat)}</ul>
+                  </details>
+                )}
+              </>
             )}
           </section>
         </div>

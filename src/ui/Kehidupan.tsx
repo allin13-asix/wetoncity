@@ -4,10 +4,9 @@
 // peringkat reputasi, serta pekerja dan lowongan per bangunan. Semua angka dihitung server; di sini hanya tampilan.
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { ATRIBUT, LAPAR, NAMA_ATRIBUT, STATISTIK } from '@/data/balans'
+import { ATRIBUT, NAMA_ATRIBUT, STATISTIK } from '@/data/balans'
 import { rupiah } from '@/data/ekonomi'
-import { laparKini, sedangLapar } from '@/server/sistem-aturan'
-import { lamaWaktu, panggil } from './api'
+import { panggil } from './api'
 import type { Props } from './FiturKota'
 
 function Meter({ nama, nilai, maks, kelas = '', teks }: { nama: string; nilai: number; maks: number; kelas?: string; teks?: string }) {
@@ -26,20 +25,14 @@ function Meter({ nama, nilai, maks, kelas = '', teks }: { nama: string; nilai: n
 
 // ---------------------------------------------------------------- kondisi
 
-/** Lapar, level dan EXP, reputasi, atribut, serta peringatan rawat inap, wajib pindah, dan kursus yang berjalan. */
-export function Kondisi({ k, kini }: Pick<Props, 'k' | 'kini'>) {
-  const lapar = laparKini(k.lapar.nilai, new Date(k.lapar.pada), kini)
-  const hungry = k.peran !== 'walikota' && sedangLapar(lapar)
+/**
+ * Level dan EXP, reputasi, atribut, dan batas ganti pekerjaan, dilipat di Beranda. Lapar, rawat inap, wajib pindah,
+ * dan kursus yang berjalan tampil di bagian atas Beranda.
+ */
+export function Kondisi({ k }: Pick<Props, 'k'>) {
   return (
-    <section className="panel">
-      <h2>Kondisi</h2>
-      {k.dirawat && <p className="pesan galat">Kamu dirawat di rumah sakit karena kelaparan, sampai {new Date(k.dirawat.sampai).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.</p>}
-      {hungry && !k.dirawat && (
-        <p className="pesan galat">
-          Kamu LAPAR: Tenaga pulih setengah lajunya dan Kesehatan turun {LAPAR.kesehatanKurang} tiap jam (tidak di bawah {LAPAR.kesehatanMin}). Makan di RM Padang, beli di minimarket, lalu pakai dari inventori.
-        </p>
-      )}
-      <Meter nama="Lapar" nilai={lapar} maks={k.lapar.maks} kelas={hungry ? 'sakit' : 'sehat'} teks={`${lapar} / ${k.lapar.maks}${hungry ? ' (lapar)' : ''}`} />
+    <details className="panel lipat">
+      <summary>Level {k.level.nilai}, reputasi, dan atribut</summary>
       <Meter nama={`Level ${k.level.nilai}`} nilai={k.level.exp} maks={k.level.perlu} teks={`EXP ${k.level.exp.toLocaleString('id-ID')} / ${k.level.perlu.toLocaleString('id-ID')}`} />
       <p className="catatan">
         Reputasi <strong>{k.reputasi.total.toLocaleString('id-ID')}</strong>, pekan ini {k.reputasi.minggu.toLocaleString('id-ID')}.{' '}
@@ -51,17 +44,11 @@ export function Kondisi({ k, kini }: Pick<Props, 'k' | 'kini'>) {
           <Meter key={a} nama={NAMA_ATRIBUT[a]} nilai={k.atribut[a]} maks={STATISTIK.maks} teks={String(k.atribut[a])} />
         ))}
       </div>
-      {k.wajibPindah && (
-        <p className="pesan galat">
-          Kamu menolak atau memutus pertemanan dengan teman sekamar, jadi wajib pindah sebelum {new Date(k.wajibPindah.tenggat).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.
-        </p>
-      )}
-      {k.latihan && <p className="catatan">Sedang ikut: {k.latihan.nama}, selesai {lamaWaktu(Date.parse(k.latihan.selesai) - kini.getTime())} lagi.</p>}
       {!k.latihan && k.latihanJeda && <p className="catatan">Istirahat setelah kursus sampai {new Date(k.latihanJeda).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.</p>}
       <p className="catatan">
         Ganti pekerjaan: sisa {k.gantiKerja.sisa} dari {k.gantiKerja.maks} kali pekan ini{k.gantiKerja.jedaSampai ? `, bisa lagi ${new Date(k.gantiKerja.jedaSampai).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}.
       </p>
-    </section>
+    </details>
   )
 }
 
