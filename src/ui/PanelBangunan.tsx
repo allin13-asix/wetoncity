@@ -9,6 +9,7 @@ import { pekerjaanDi, semuaPekerjaan, type Pekerjaan } from '@/data/pekerjaan'
 import { KULIAH, jurusan as dataJurusan, totalUkt } from '@/data/pendidikan'
 import { penempatanById } from '@/data/tataletak'
 import { Gembok, Tutup } from './ikon'
+import { useDataPeta } from './namaBangunan'
 
 const namaJurusan = (id: string) => dataJurusan.find((j) => j.id === id)?.nama ?? id
 
@@ -24,6 +25,7 @@ function syarat(k: Pekerjaan): string {
 
 /** aksi: panel aksi pemain di bangunan ini (bila masuk); info bangunan lalu dilipat di bawahnya. */
 export default function PanelBangunan({ id, onTutup, aksi }: { id: string; onTutup: () => void; aksi?: ReactNode }) {
+  const namaBaru = useDataPeta().nama[id] // nama buatan pemiliknya, bila ada
   const p = penempatanById.get(id)
   const j = p ? jenisById.get(p.jenis) : undefined
   if (!p || !j) return null
@@ -45,7 +47,8 @@ export default function PanelBangunan({ id, onTutup, aksi }: { id: string; onTut
               </span>
             )}
           </div>
-          <h2>{j.nama}</h2>
+          <h2>{namaBaru ?? j.nama}</h2>
+          {namaBaru && <p className="catatan nama-asli">{j.nama}</p>}
         </div>
         <button type="button" className="ikon-tombol" aria-label="Tutup info" onClick={onTutup}>
           <Tutup />

@@ -236,6 +236,75 @@ details.lipat[open] > summary::after { content: '\2212'; }
 details.lipat .ktp { margin: 0; }
 .lipat-dalam > summary { cursor: pointer; margin-top: 8px; font-weight: 700; color: var(--papan-2); }
 
+/* ---------- Obrolan: ruang kota dan gedung, pesan pribadi, teman, hadiah ---------- */
+.hub-obrolan { display: grid; gap: 12px; }
+.halaman.hub-obrolan > * { margin: 0; }
+.lencana-tab { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--sinyal); color: #fff; font-size: 11px; line-height: 17px; }
+.obrolan { display: grid; gap: 8px; }
+.obrolan-pesan {
+  /* tinggi tetap supaya kolom tulis selalu terlihat di atas navigasi bawah */
+  height: calc(100dvh - 330px - var(--nav-bawah, 0px)); min-height: 240px; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--garis); border-radius: 14px; background: var(--kapur);
+}
+.gelembung-chat { align-self: flex-start; max-width: 82%; display: grid; gap: 2px; padding: 7px 10px 5px; border-radius: 4px 14px 14px 14px; background: var(--kertas); border: 1px solid var(--garis); }
+.gelembung-chat.saya { align-self: flex-end; border-radius: 14px 4px 14px 14px; background: color-mix(in srgb, var(--bollard) 35%, var(--kertas)); border-color: transparent; }
+.chat-nama { font-size: 12.5px; font-weight: 800; color: var(--papan-2); text-decoration: none; }
+.chat-nama small { font-weight: 600; color: var(--redup); }
+.chat-isi { overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.35; }
+.gelembung-chat time { justify-self: end; font-size: 11px; color: var(--redup); }
+.kosong-obrolan { margin: auto; text-align: center; }
+.obrolan-tulis { display: flex; gap: 8px; }
+.obrolan-tulis input, .kolom-cari {
+  flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; border: 2px solid var(--papan); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit;
+}
+.kolom-cari { width: 100%; margin: 4px 0 8px; }
+.obrolan-tulis .tombol-utama { flex: none; }
+.utas { display: grid; gap: 8px; }
+.utas-kepala { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.utas-nama { flex: 1; min-width: 0; display: grid; text-decoration: none; color: var(--teks); }
+.utas-nama small, .teman-nama small, .percakapan-isi small { color: var(--redup); }
+.tombol-tipis { min-height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--papan-2); font: inherit; font-weight: 700; cursor: pointer; }
+.tombol-tipis:disabled { opacity: 0.5; }
+.daftar-percakapan, .daftar-teman { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.daftar-percakapan button {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--garis); border-radius: 14px;
+  background: var(--kertas); color: var(--teks); font: inherit; text-align: left; cursor: pointer;
+}
+.avatar-kecil {
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
+  background: radial-gradient(circle at 35% 30%, #e07a5f, #b3402f 70%); color: #fff; font-family: var(--tampil); font-weight: 800; font-size: 15px;
+}
+.percakapan-isi { flex: 1; min-width: 0; display: grid; }
+.percakapan-isi small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.percakapan-sisi { display: grid; justify-items: end; gap: 3px; font-size: 12px; color: var(--redup); }
+.lencana { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--sinyal); color: #fff; font-size: 11px; line-height: 16px; text-align: center; }
+.daftar-teman li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--garis); }
+.daftar-teman li:first-child { border-top: 0; }
+.teman-nama { flex: 1 1 160px; min-width: 0; display: grid; text-decoration: none; color: var(--teks); }
+.daftar-teman .baris-aksi { flex-wrap: nowrap; gap: 6px; }
+.daftar-teman .baris-aksi > * { flex: none; min-height: 40px; padding: 0 12px; }
+
+.lapis { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; padding: 12px; background: rgb(6 28 38 / 0.45); }
+@media (min-width: 640px) { .lapis { place-items: center; } }
+.dialog-hadiah { width: min(100%, 460px); max-height: 80dvh; overflow-y: auto; box-shadow: var(--bayangan); }
+.dialog-kepala { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.dialog-kepala h2 { margin: 0; }
+.pilih-hadiah { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pilih-hadiah button {
+  width: 100%; display: grid; gap: 2px; padding: 10px; border: 2px solid var(--garis); border-radius: 12px; background: var(--kertas); color: var(--teks); font: inherit; text-align: left; cursor: pointer;
+}
+.pilih-hadiah button[aria-pressed='true'] { border-color: var(--lumut); background: color-mix(in srgb, var(--lumut) 12%, var(--kertas)); }
+.pilih-hadiah small { color: var(--redup); }
+.dialog-hadiah .baris-aksi { align-items: flex-end; }
+.dialog-hadiah input { width: 90px; }
+
+/* ---------- kepemilikan bangunan ---------- */
+.milik-baris { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; }
+.ganti-nama { align-items: flex-end; }
+.ganti-nama .tulis-label { flex: 1 1 180px; }
+.ganti-nama input { width: 100%; }
+.nama-asli { margin: 0; font-size: 13px; }
+
 /* ---------- ponsel: sentuhan akhir (dimuat terakhir agar menimpa aturan lain) ---------- */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 a, button, summary, select, input, label { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }

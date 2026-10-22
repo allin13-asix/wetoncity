@@ -1,9 +1,10 @@
 // Aturan murni sistem kehidupan kota: lapar, EXP dan reputasi, kursus, konstruksi, roulette, memancing, minimarket,
 // seleksi, kuota, dan batas ganti pekerjaan. Tanpa basis data dan tanpa jam global; angka dari src/data/balans.ts.
 import {
-  AKTIVITAS, ATRIBUT, BANGUN, GANTI_KERJA, KUOTA, LAPAR, LATIHAN, LEVEL, MEMANCING, PERINGKAT, ROULETTE, SELEKSI, STATISTIK, TAHAP_BANGUN, TOKO,
+  AKTIVITAS, ATRIBUT, BANGUN, BANGUNAN_MILIK, GANTI_KERJA, KUOTA, LAPAR, LATIHAN, LEVEL, MEMANCING, PERINGKAT, PROPERTI, ROULETTE, SELEKSI, STATISTIK, TAHAP_BANGUN, TOKO,
   type Atribut, type Golongan, type Kelangkaan, type Promo, type Sumber,
 } from '../data/balans.ts'
+import { jenisById } from '../data/bangunan.ts'
 import { indeksHarga } from '../data/ekonomi.ts'
 import type { Pekerjaan } from '../data/pekerjaan.ts'
 import { KESEHATAN, tanggalWIB } from './aturan.ts'
@@ -12,6 +13,16 @@ import type { Harian, SesiPancing, Warga } from './tipe.ts'
 
 const JAM = 3_600_000
 const HARI = 86_400_000
+
+// ---------------------------------------------------------------- kepemilikan bangunan
+
+/** Bangunan kebutuhan Pemerintah Kota: tidak bisa dibeli (lihat BANGUNAN_MILIK di balans.ts). */
+export function milikKota(jenis: string): boolean {
+  const j = jenisById.get(jenis)
+  return !j || !!j.terkunci || BANGUNAN_MILIK.kategoriKota.includes(j.kategori) || BANGUNAN_MILIK.jenisKota.includes(jenis)
+}
+/** Rumah tinggal (dibeli untuk ditinggali, tanpa penghasilan pasif). */
+export const adalahRumah = (jenis: string) => PROPERTI.hargaNpc[jenis] !== undefined
 
 // ---------------------------------------------------------------- lapar
 

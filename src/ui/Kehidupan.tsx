@@ -6,8 +6,16 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { ATRIBUT, NAMA_ATRIBUT, STATISTIK } from '@/data/balans'
 import { rupiah } from '@/data/ekonomi'
-import { panggil } from './api'
+import { lamaWaktu, panggil } from './api'
 import type { Props } from './FiturKota'
+import { KirimHadiah } from './Hadiah'
+
+/** "aktif 5 menit lalu", "aktif 2 hari lalu". */
+export function aktifSejak(iso: string): string {
+  const ms = Date.now() - Date.parse(iso)
+  if (ms < 5 * 60_000) return 'baru saja aktif'
+  return `aktif ${lamaWaktu(ms).replace(/ \d+ (menit|jam)$/, '')} lalu`
+}
 
 function Meter({ nama, nilai, maks, kelas = '', teks }: { nama: string; nilai: number; maks: number; kelas?: string; teks?: string }) {
   return (
@@ -61,7 +69,7 @@ type DataInventori = {
   surat: Array<{ id: string; pengirim: string; judul: string; item: string | null; namaItem: string | null; jumlah: number; uang: number; waktu: string }>
 }
 type DataTeman = {
-  teman: Array<{ id: string; nama: string; level: number }>
+  teman: Array<{ id: string; nama: string; level: number; aktif: string }>
   masuk: Array<{ id: string; nama: string; level: number; sekamar: boolean }>
   keluar: Array<{ id: string; nama: string; level: number }>
   sekamar: Array<{ id: string; nama: string; status: string }>
@@ -174,6 +182,7 @@ export function Inventori({ k, bebas, lakukan, versi }: Pick<Props, 'k' | 'bebas
 /** Teman, permintaan pertemanan (termasuk otomatis dari teman sekamar), dan teman sekamar. */
 export function Teman({ bebas, lakukan, versi }: Pick<Props, 'bebas' | 'lakukan'> & { versi: number }) {
   const [d, setD] = useState<DataTeman | null>(null)
+  const [hadiah, setHadiah] = useState<{ id: string; nama: string } | null>(null)
   useEffect(() => {
     panggil<DataTeman>('/api/teman').then((r) => r.ok && setD(r.data))
   }, [versi])
@@ -238,23 +247,27 @@ export function Teman({ bebas, lakukan, versi }: Pick<Props, 'bebas' | 'lakukan'
       )}
       <h3 className="sub">Daftar teman ({d.teman.length})</h3>
       {d.teman.length === 0 ? (
-        <p className="catatan">Belum ada teman. Buka profil warga lain dari daftar pekerja di sebuah bangunan lalu tambahkan sebagai teman.</p>
+        <p className="catatan">
+          Belum ada teman. <Link className="tautan" href="/pesan?tab=teman">Cari warga</Link> menurut nama, atau sapa warga lain di <Link className="tautan" href="/pesan">obrolan kota</Link>.
+        </p>
       ) : (
-        <ul className="lowongan">
+        <ul className="daftar-teman">
           {d.teman.map((t) => (
             <li key={t.id}>
-              <span>
+              <Link className="teman-nama" href={`/profil/${t.id}`}>
                 <strong>{t.nama}</strong>
-                <small>Level {t.level}</small>
-              </span>
+                <small>Level {t.level} · {aktifSejak(t.aktif)}</small>
+              </Link>
               <span className="baris-aksi">
-                <Link className="tombol-sekunder" href={`/profil/${t.id}`}>Profil</Link>
-                <button type="button" className="tombol-sekunder" disabled={!bebas} onClick={() => aksi('putus', 'putus', t.id, `Pertemanan dengan ${t.nama} diputus`)}>Putus</button>
+                <Link className="tombol-sekunder" href={`/pesan?dengan=${t.id}`}>Chat</Link>
+                <button type="button" className="tombol-sekunder" onClick={() => setHadiah({ id: t.id, nama: t.nama })}>Hadiah</button>
+                <button type="button" className="tombol-tipis" disabled={!bebas} onClick={() => confirm(`Putus pertemanan dengan ${t.nama}?`) && aksi('putus', 'putus', t.id, `Pertemanan dengan ${t.nama} diputus`)}>Putus</button>
               </span>
             </li>
           ))}
         </ul>
       )}
+      {hadiah && <KirimHadiah ke={hadiah} onTutup={() => setHadiah(null)} />}
     </section>
   )
 }

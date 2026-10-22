@@ -127,6 +127,9 @@ export const PROPERTI = {
     sapa: 'Rumah ini sudah lama saya tempati. Kalau cocok, saya lepas dengan harga pas.',
     tawar: 'Harga sudah saya hitung dari biaya bangun dan lokasi. Tidak bisa ditawar, tapi suratnya lengkap.',
     setuju: 'Baik, kuncinya sekarang milikmu. Rawat baik-baik, ya.',
+    /** untuk bangunan usaha (bukan rumah) */
+    sapaUsaha: 'Usaha ini sudah lama saya kelola. Kalau cocok, saya lepas dengan harga pasar hari ini.',
+    setujuUsaha: 'Baik, usaha ini sekarang milikmu. Jaga pegawai dan pelanggannya, ya.',
   },
 } as const
 

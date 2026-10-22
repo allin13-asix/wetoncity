@@ -19,7 +19,8 @@ import {
   tabungan, terbang, usaha, infoKota, tetapkanUmk, pilihSekolah, AKSI_LOG_SIMPAN_MS, namaBangunan,
 } from '../src/server/game.ts'
 import { bacaRuang, bacaUtas, daftarPercakapan, kirimPribadi, kirimRuang, ruangSaya } from '../src/server/obrolan.ts'
-import { hargaBangunan, konteksHarga, milikKota, properti } from '../src/server/properti.ts'
+import { hargaBangunan, konteksHarga, properti } from '../src/server/properti.ts'
+import { milikKota } from '../src/server/sistem-aturan.ts'
 import { cariWarga, inventori, teman } from '../src/server/sistem.ts'
 import { edisiTanggal, galatEdisi, segarkanKoran, terbaru, terbit } from '../src/server/koran.ts'
 import { bungkus, literal } from '../src/server/kueri.ts'

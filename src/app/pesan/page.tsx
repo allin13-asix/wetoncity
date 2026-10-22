@@ -1,14 +1,18 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import Obrolan from '@/ui/Obrolan'
 import Papan from '@/ui/Papan'
-import { KotakPesan } from '@/ui/ProfilPublik'
 
-export const metadata: Metadata = { title: 'Pesan | Weton City' }
+export const metadata: Metadata = { title: 'Obrolan | Weton City' }
 
 export default function Page() {
   return (
     <>
       <Papan />
-      <KotakPesan />
+      {/* Obrolan membaca ?tab= dan ?dengan= dari alamat */}
+      <Suspense>
+        <Obrolan />
+      </Suspense>
     </>
   )
 }

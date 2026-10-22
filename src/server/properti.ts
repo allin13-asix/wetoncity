@@ -15,7 +15,7 @@ import { Galat } from './galat.ts'
 import { catat, dalamTransaksi, wajibMulai } from './game.ts'
 import { catatAktivitas } from './kemajuan.ts'
 import { bungkus, type Tx } from './kueri.ts'
-import { progresBangun, tahapBangun, wajibUuid } from './sistem-aturan.ts'
+import { adalahRumah, milikKota, progresBangun, tahapBangun, wajibUuid } from './sistem-aturan.ts'
 import type { BarisLahan, Warga } from './tipe.ts'
 
 const rupiah = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
@@ -26,14 +26,6 @@ type Tawaran = {
 }
 
 // ---------------------------------------------------------------- kepemilikan bangunan dan harga
-
-/** Bangunan kebutuhan Pemerintah Kota: tidak bisa dibeli (lihat BANGUNAN_MILIK di balans.ts). */
-export function milikKota(jenis: string): boolean {
-  const j = jenisById.get(jenis)
-  return !j || !!j.terkunci || BANGUNAN_MILIK.kategoriKota.includes(j.kategori) || BANGUNAN_MILIK.jenisKota.includes(jenis)
-}
-/** Rumah tinggal (dibeli untuk ditinggali, tanpa penghasilan pasif). */
-export const adalahRumah = (jenis: string) => PROPERTI.hargaNpc[jenis] !== undefined
 
 /**
  * Bangunan milik warga NPC yang bisa dibeli: semua bangunan di peta selain milik Pemerintah Kota. Pemilik NPC-nya warga yang

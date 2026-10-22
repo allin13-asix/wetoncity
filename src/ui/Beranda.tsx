@@ -150,7 +150,8 @@ export default function Beranda() {
     perhatian.push({ teks: `Tagihan ${rupiah(k.tagihan.total)} jatuh tempo ${lamaWaktu(sisaTagihan)} lagi, uangmu kurang. Selisihnya menjadi kasbon.` })
   }
   if (k.suratBaru > 0) perhatian.push({ teks: `${k.suratBaru} surat menunggu di mailbox.`, href: '/inventori' })
-  if (k.permintaanTeman > 0) perhatian.push({ teks: `${k.permintaanTeman} permintaan pertemanan menunggu jawabanmu (lihat Teman di bawah).` })
+  if (k.pesanBaru > 0) perhatian.push({ teks: `${k.pesanBaru} pesan pribadi belum dibaca.`, href: '/pesan?tab=pribadi' })
+  if (k.permintaanTeman > 0) perhatian.push({ teks: `${k.permintaanTeman} permintaan pertemanan menunggu jawabanmu.`, href: '/pesan?tab=teman' })
 
   return (
     <main className="halaman beranda">
@@ -212,7 +213,7 @@ export default function Beranda() {
       <nav className="pintasan" aria-label="Pintasan">
         <Pintasan href="/inventori" ikon={<Kotak />} label="Inventori" lencana={k.suratBaru} />
         <Pintasan href="/pasar" ikon={<Toko />} label="Pasar" />
-        <Pintasan href="/pesan" ikon={<Obrolan />} label="Pesan" />
+        <Pintasan href="/pesan" ikon={<Obrolan />} label="Obrolan" lencana={k.pesanBaru} />
         <Pintasan href={`/profil/${k.warga.id}`} ikon={<Orang />} label="Profilku" />
         <Pintasan href="/peringkat" ikon={<Piala />} label="Peringkat" />
         <Pintasan href="/koran" ikon={<Koran />} label="Koran" lencana={koranBaru ? 'Baru' : 0} />
