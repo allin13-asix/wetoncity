@@ -17,7 +17,7 @@ import {
   rentangUmk, trenEkonomi, type Barang, KESEHATAN, kapasitasHunian, minKeahlianUntuk, sakit, uktUntuk,
 } from './aturan.ts'
 import { BANGUN, GANTI_KERJA, INVENTORI, LAPAR, LATIHAN, LEVEL, MEMANCING, NAMA_ATRIBUT, SELEKSI, STATISTIK, type Atribut } from '../data/balans.ts'
-import type { Pekerjaan } from '../data/pekerjaan.ts'
+import { semuaPekerjaan, type Pekerjaan } from '../data/pekerjaan.ts'
 import type { Sql, Tx as TxMentah } from './db.ts'
 import { Galat } from './galat.ts'
 import { tambahItem } from './inventori.ts'
@@ -691,6 +691,27 @@ export async function pasangKerja(tx: Tx, w: Warga, p: Pekerjaan, tempatDiminta:
   if (ganti) w.ganti_kerja = [...(w.ganti_kerja ?? []).filter((x) => now.getTime() - Date.parse(x) < GANTI_KERJA.periodeMs), now.toISOString()]
   w.pekerjaan_id = p.id
   w.tempat_kerja = tempat
+}
+
+/**
+ * Pekerjaan yang semua bangunannya sudah penuh kuota pemain (atau belum punya bangunan aktif), dengan hitungan yang sama
+ * seperti pasangKerja. Untuk rekomendasi tur: yang penuh tidak ditawarkan. Satu penerbangan, tanpa transaksi.
+ */
+export async function pekerjaanPenuh(sql: Sql, now = new Date()): Promise<string[]> {
+  const q = bungkus(sql)
+  const [isi, dibangun] = await Promise.all([
+    q<{ pekerjaan_id: string; tempat_kerja: string; n: number }[]>`
+      select pekerjaan_id, tempat_kerja, count(*)::int as n from warga where pekerjaan_id is not null and tempat_kerja is not null group by 1, 2`,
+    q<{ lahan_id: string; bangun_jenis: string }[]>`select lahan_id, bangun_jenis from lahan_milik where jenis_objek = 'lahan' and bangun_jenis is not null and bangun_selesai <= ${now}`,
+  ])
+  const terisi = new Map(isi.map((r) => [`${r.pekerjaan_id}|${r.tempat_kerja}`, r.n]))
+  return semuaPekerjaan
+    .filter((p) => {
+      const calon = [...penempatan.filter((x) => x.jenis === p.tempat).map((x) => x.id), ...dibangun.filter((d) => d.bangun_jenis === p.tempat).map((d) => d.lahan_id)]
+      const kuota = kuotaLowongan(p.tempat, p.tier, p.id)
+      return !calon.some((c) => (terisi.get(`${p.id}|${c}`) ?? 0) < kuota)
+    })
+    .map((p) => p.id)
 }
 
 export const ambilPekerjaan = (sql: Sql, id: string, kunci: string, pekerjaanId: string, now = new Date(), tempatDiminta?: string | null) =>

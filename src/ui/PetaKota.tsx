@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { jenisById } from '@/data/bangunan'
 import { lahanKosong, penempatan, penempatanById } from '@/data/tataletak'
 import { tur } from '@/data/tur'
 import type { Fokus } from '@/kota/Kamera'
@@ -52,13 +53,25 @@ export default function PetaKota() {
     modeRef.current = mode
   }, [mode])
 
-  const terbang = useCallback((id: string, zoom = 24) => {
+  const terbang = useCallback((id: string, zoom?: number) => {
     const p = penempatanById.get(id) ?? lahanKosong.find((l) => l.id === id) ?? penempatan.find((x) => x.jenis === id.replace(/-\d+$/, ''))
     if (!p) return
-    const ponsel = window.innerWidth < 900
-    // Panel menutupi bagian bawah (ponsel) atau kanan (desktop): geser bangunan ke area yang masih terlihat.
-    const naik = modeRef.current === 'tur' ? 0.32 : 0.22
-    setFokus({ x: p.x, z: p.z, zoom, id: ++nomor.current, kananPx: ponsel ? 0 : 190, naikPx: ponsel ? window.innerHeight * naik : 0 })
+    const ini = ++nomor.current
+    // Tunggu panel yang baru dibuka tergambar, lalu ukur ruang peta yang benar-benar terlihat: di bawah HUD atas dan
+    // (di ponsel) di atas panel bawah. Bangunan diletakkan di tengah ruang itu, bukan di tengah layar.
+    requestAnimationFrame(() => {
+      if (ini !== nomor.current) return
+      const kanvas = document.querySelector('.peta canvas')?.getBoundingClientRect()
+      if (!kanvas) return
+      const ponsel = window.innerWidth < 900
+      const atas = Math.max(kanvas.top, document.querySelector('.hud-atas')?.getBoundingClientRect().bottom ?? kanvas.top)
+      const lembar = ponsel ? document.querySelector('.hud-bawah .lembar')?.getBoundingClientRect() : undefined
+      const bawah = Math.max(atas + 80, Math.min(kanvas.bottom, lembar?.top ?? kanvas.bottom))
+      // tur: zoom otomatis supaya bangunan dan sekitarnya muat di ruang itu; pilihan biasa tetap dekat seperti sebelumnya
+      const [w, d] = 'jenis' in p ? (jenisById.get(p.jenis)?.ukuran ?? [8, 8]) : [p.w, p.d]
+      const z = zoom ?? (modeRef.current === 'tur' ? Math.min(20, Math.max(8, Math.min(bawah - atas, kanvas.width) / (Math.max(w, d) * 2.6))) : 24)
+      setFokus({ x: p.x, z: p.z, zoom: z, id: ini, kananPx: ponsel ? 0 : 190, naikPx: ponsel ? (kanvas.top + kanvas.bottom) / 2 - (atas + bawah) / 2 : 0 })
+    })
   }, [])
 
   const pilih = useCallback(
@@ -73,15 +86,18 @@ export default function PetaKota() {
     [terbang],
   )
 
+  const setPesan = st.setPesan
   const keLangkah = useCallback(
     (i: number) => {
+      // kabar langkah sebelumnya (misalnya "Sekarang tinggal di ...") jangan menutupi bangunan langkah berikutnya
+      setPesan(null)
       setLangkah(i)
       const l = tur[i]
       const sasaran = penempatanById.has(l.bangunan) ? l.bangunan : (penempatan.find((x) => x.jenis === l.bangunan.replace(/-\d+$/, ''))?.id ?? l.bangunan)
       setTerpilih(sasaran)
       terbang(sasaran)
     },
-    [terbang],
+    [terbang, setPesan],
   )
 
   const mulaiTur = useCallback(() => {
@@ -299,9 +315,12 @@ export default function PetaKota() {
                 Ke tempat kerja
               </button>
             )}
-            <button type="button" className={`tombol-bilah${k?.pekerjaan ? '' : ' utama'}`} disabled={mode === 'tur'} onClick={mulaiTur}>
-              <Rute /> Tur kota
-            </button>
+            {/* tur sudah tuntas (sekolah, tempat tinggal, dan pekerjaan pertama sudah dipilih): tombolnya tidak ditawarkan lagi */}
+            {!(k?.sekolah && k.hunian && k.pekerjaan) && (
+              <button type="button" className="tombol-bilah utama" disabled={mode === 'tur'} onClick={mulaiTur}>
+                <Rute /> Tur kota
+              </button>
+            )}
           </div>
         </div>
       </div>
