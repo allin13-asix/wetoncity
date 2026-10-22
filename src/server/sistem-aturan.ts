@@ -37,16 +37,19 @@ export function waktuMulaiLapar(w: Pick<Warga, 'lapar' | 'lapar_pada' | 'peran'>
  * pemain harus dirawat: Kesehatan sudah di batas minimum dan masih lapar. Mengubah `w`. Wali Kota tidak pernah lapar.
  * Waktu mulai LAPAR dihitung dari kapan nilai lapar pertama kali di bawah ambang, jadi hasilnya sama berapa pun jarak
  * antar pemanggilan (tanpa cron).
+ *
+ * Mengembalikan saat pemain mulai perlu dirawat (bisa di masa lalu bila ia lama tidak membuka game), atau null.
  */
-export function hitungLapar(w: KeadaanLapar, now: Date): boolean {
+export function hitungLapar(w: KeadaanLapar, now: Date): Date | null {
   if (w.peran === 'walikota') {
     w.lapar = LAPAR.maks
     w.lapar_pada = now
     w.lapar_hukum_pada = null
-    return false
+    return null
   }
   const sekarang = now.getTime()
   const t0 = w.lapar_pada.getTime()
+  let kapan = sekarang
   if (sekarang > t0) {
     const h0 = w.lapar
     const selang = LAPAR.turunSelangMs
@@ -64,8 +67,12 @@ export function hitungLapar(w: KeadaanLapar, now: Date): boolean {
     } else {
       const awal = Math.max(mulai, w.lapar_hukum_pada?.getTime() ?? mulai)
       const tik = Math.floor((sekarang - awal) / LAPAR.kesehatanJedaMs)
+      if (w.kesehatan <= LAPAR.kesehatanMin) kapan = awal
       if (tik > 0) {
         if (w.kesehatan > LAPAR.kesehatanMin) {
+          // tik ke berapa Kesehatan menyentuh batas minimum
+          const n = Math.ceil((w.kesehatan - LAPAR.kesehatanMin) / LAPAR.kesehatanKurang)
+          if (n <= tik) kapan = awal + n * LAPAR.kesehatanJedaMs
           if (w.kesehatan >= KESEHATAN.maks) w.kesehatan_pada = now
           w.kesehatan = Math.max(LAPAR.kesehatanMin, w.kesehatan - tik * LAPAR.kesehatanKurang)
         }
@@ -75,7 +82,7 @@ export function hitungLapar(w: KeadaanLapar, now: Date): boolean {
       }
     }
   }
-  return sedangLapar(w.lapar) && w.kesehatan <= LAPAR.kesehatanMin
+  return sedangLapar(w.lapar) && w.kesehatan <= LAPAR.kesehatanMin ? new Date(Math.min(kapan, sekarang)) : null
 }
 
 /** Tambah lapar (makan atau minum). Jam turun mulai lagi dari `now`. */

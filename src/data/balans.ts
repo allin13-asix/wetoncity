@@ -293,7 +293,8 @@ export const SELEKSI: Record<Golongan, {
 
 /**
  * Kuota pekerja pemain per pekerjaan per bangunan = round(perTier[tier] x pengaliJenis[jenis ?? 1]), paling sedikit 1.
- * `perPekerjaan` menimpa hitungan itu untuk pekerjaan tertentu.
+ * `perPekerjaan` menimpa hitungan itu untuk pekerjaan tertentu. Kuli angkut pelabuhan tanpa batas: berapa pun warga
+ * yang datang, selalu ada satu pekerjaan Tier 1 yang bisa diambil, jadi pendatang baru tidak pernah terkunci tanpa penghasilan.
  */
 export const KUOTA = {
   perTier: { 1: 4, 2: 3, 3: 2, 4: 2, 5: 1 } as Record<number, number>,
@@ -301,7 +302,7 @@ export const KUOTA = {
     'terminal-pelabuhan': 2, 'gudang-pelabuhan': 2, tpi: 2, 'pabrik-otomotif': 3, 'pabrik-garmen': 3, 'pabrik-makanan': 3,
     'balai-kota': 2, minimarket: 1, 'alpa-maret': 1.5, 'indo-april': 1.5, 'rm-padang': 1.5, 'rs-weton': 2, 'hotel-pantai': 1.5,
   } as Record<string, number>,
-  perPekerjaan: {} as Record<string, number>,
+  perPekerjaan: { 'kuli-angkut': Infinity } as Record<string, number>,
 } as const
 
 // ---------------------------------------------------------------- 17. kursus keahlian dan atribut

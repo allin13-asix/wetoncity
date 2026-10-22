@@ -168,11 +168,26 @@ export default function ProfilPublik({ id }: { id: string }) {
 type Pesanan = Array<{ id: number; dari: { id: string; nama: string }; ke: { id: string; nama: string }; isi: string; masuk: boolean; baru: boolean; waktu: string }>
 
 /** Kotak pesan: pesan masuk dan keluar terbaru. */
+const PESAN_SEGAR_MS = 20_000
+
 export function KotakPesan() {
   const [d, setD] = useState<Pesanan | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
   useEffect(() => {
-    panggil<Pesanan>('/api/pesan').then((r) => (r.ok ? setD(r.data) : setGalat(r.galat.pesan)))
+    // server menandai pesan sudah dibaca saat dikirim, jadi tanda "Baru" dipertahankan di sini sampai halaman ditinggalkan
+    const muat = () =>
+      panggil<Pesanan>('/api/pesan').then((r) =>
+        r.ok ? setD((lama) => r.data.map((m) => ({ ...m, baru: m.baru || !!lama?.some((x) => x.id === m.id && x.baru) }))) : setGalat(r.galat.pesan),
+      )
+    muat()
+    // pesan baru masuk tanpa memuat ulang halaman: periksa berkala selama halaman terlihat, dan saat kembali ke halaman ini
+    const t = setInterval(() => document.visibilityState === 'visible' && muat(), PESAN_SEGAR_MS)
+    const segarkan = () => document.visibilityState === 'visible' && muat()
+    document.addEventListener('visibilitychange', segarkan)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', segarkan)
+    }
   }, [])
   return (
     <main className="halaman">

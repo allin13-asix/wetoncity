@@ -25,7 +25,7 @@ const isi = (masuk: boolean) => [
 
 export default function NavBawah() {
   const path = usePathname()
-  const sesi = useSesi()
+  const sesi = useSesi(path)
   if (TANPA.some((t) => path === t || path.startsWith(`${t}/`))) return null
   return (
     <nav className="nav-bawah" aria-label="Navigasi utama">

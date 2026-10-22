@@ -8,7 +8,7 @@ import { jenisById, kategori } from '@/data/bangunan'
 import { distrik, lahanKosong, penempatan, pusatDistrik } from '@/data/tataletak'
 import type { Penempatan } from '@/data/tipe'
 import { bahanPadat, malam, pasangNyala } from './bahan'
-import { Label } from './Label'
+import { Label, grupTabrakan } from './Label'
 
 const rad = (rot: number) => (rot * Math.PI) / 180
 const KUNING = '#ffc933'
@@ -301,6 +301,9 @@ function LahanKlik({ terpilih, onPilih }: { terpilih: string | null; onPilih: (i
   )
 }
 
+// label distrik bisa berdekatan (pusatnya rata-rata posisi bangunan), jadi yang menumpuk disembunyikan sampai zoom memisahkannya
+const tabrakanDistrik = grupTabrakan()
+
 export function Isi({ terpilih, onPilih }: { terpilih: string | null; onPilih: (id: string) => void }) {
   const dipilih = terpilih ? penempatan.find((p) => p.id === terpilih) : undefined
   const lahanDipilih = terpilih ? lahanKosong.find((l) => l.id === terpilih) : undefined
@@ -320,7 +323,7 @@ export function Isi({ terpilih, onPilih }: { terpilih: string | null; onPilih: (
       {distrik.map((d) => {
         const c = pusatDistrik.get(d.id)
         if (!c) return null
-        return <Label key={`d-${d.id}`} teks={d.singkat} posisi={[c.x, 3.5, c.z]} px={13} latar={KUNING} huruf="#1b1500" zoomMaks={17} />
+        return <Label key={`d-${d.id}`} teks={d.singkat} posisi={[c.x, 3.5, c.z]} px={13} latar={KUNING} huruf="#1b1500" zoomMaks={17} tabrakan={tabrakanDistrik} />
       })}
       {dipilih && <Label teks={jenisById.get(dipilih.jenis)!.nama} posisi={[dipilih.x, tinggiPenempatan(dipilih) + 3.3, dipilih.z]} px={13} latar="#0c3446" huruf="#ffffff" />}
       {dipilih && <Penanda p={dipilih} />}

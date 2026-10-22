@@ -3,6 +3,7 @@
 import { BONUS_HARIAN, TARIF_PER_TENAGA, TENAGA, rupiah } from '@/data/ekonomi'
 import { biayaBulan, hunian, type Hunian } from '@/data/hunian'
 import { penempatan } from '@/data/tataletak'
+import { RUSUN } from '@/server/aturan'
 
 export const idPertama = (jenis: string) => penempatan.find((p) => p.jenis === jenis)?.id
 
@@ -41,7 +42,8 @@ export function DaftarKarcis({ dipilih, onPilih, onLihat, saatIni = null, sibuk 
         const gedung = penempatan.filter((p) => h.bangunan.includes(p.jenis))
         const kap = h.kamar ? h.kamar * h.penghuni * gedung.length : null
         const isi = terisi && kap !== null ? gedung.reduce((t, p) => t + (terisi[p.id] ?? 0), 0) : null
-        const penuh = kap !== null && isi !== null && isi >= kap
+        // Rusunawa tidak pernah penuh bagi pendatang: server membuka kamar tambahan (lihat pilihHunian)
+        const penuh = h.id !== RUSUN.id && kap !== null && isi !== null && isi >= kap
         const kunci = h.fase > 0
         const terpilih = h.id === dipilih
         const dihuni = h.id === saatIni

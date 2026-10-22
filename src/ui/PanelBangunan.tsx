@@ -46,7 +46,6 @@ export default function PanelBangunan({ id, onTutup, aksi }: { id: string; onTut
             )}
           </div>
           <h2>{j.nama}</h2>
-          <p className="ringkas">{j.ringkas}</p>
         </div>
         <button type="button" className="ikon-tombol" aria-label="Tutup info" onClick={onTutup}>
           <Tutup />
@@ -54,6 +53,8 @@ export default function PanelBangunan({ id, onTutup, aksi }: { id: string; onTut
       </header>
 
       <div className="lembar-isi">
+        {/* di dalam bagian yang digulir, bukan di kepala: di ponsel ruang lembar habis untuk deskripsi dua baris */}
+        <p className="ringkas">{j.ringkas}</p>
         {aksi}
         <details className="tentang" open={!aksi}>
         <summary>Tentang bangunan ini</summary>

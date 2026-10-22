@@ -14,6 +14,7 @@ import { BannerPerjalanan, Numpang } from './FiturKota'
 import { Kondisi, Teman } from './Kehidupan'
 import KebijakanUmk from './KebijakanUmk'
 import { useKeadaan } from './keadaan'
+import { lupakanSesi } from './sesi'
 import { koranDibaca } from './penandaKoran'
 import Pengingat from './Pengingat'
 
@@ -78,6 +79,7 @@ export default function Beranda() {
 
   async function keluar() {
     await panggil('/api/keluar', {})
+    lupakanSesi()
     router.push('/masuk')
   }
 

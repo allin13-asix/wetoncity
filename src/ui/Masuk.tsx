@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 import { MODAL_AWAL, rupiah } from '@/data/ekonomi'
 import { panggil } from './api'
+import { lupakanSesi } from './sesi'
 
 export default function Masuk() {
   const router = useRouter()
@@ -28,6 +29,7 @@ export default function Masuk() {
       setSibuk(false)
       return
     }
+    lupakanSesi()
     router.push(h.data.hunian && h.data.sekolah ? '/beranda' : '/')
   }
 

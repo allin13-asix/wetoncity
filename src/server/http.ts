@@ -9,6 +9,13 @@ export const KUKI_SESI = 'weton_sid'
 
 export const jawab = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } })
 
+/**
+ * Jawaban publik yang sama untuk semua pemain (tanpa kuki): disimpan CDN Vercel sebentar, jadi pembukaan peta beruntun
+ * tidak selalu menyentuh basis data. Data boleh terlambat paling lama `detik` (lalu disegarkan di latar).
+ */
+export const jawabPublik = (data: unknown, detik = 15) =>
+  Response.json(data, { headers: { 'Cache-Control': `public, max-age=0, s-maxage=${detik}, stale-while-revalidate=${detik * 4}` } })
+
 export function galatKeJawaban(e: unknown): Response {
   if (e instanceof Galat) return jawab({ galat: { kode: e.kode, pesan: e.message } }, e.status)
   console.error(e)

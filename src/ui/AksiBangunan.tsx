@@ -9,7 +9,7 @@ import { NAMA_ATRIBUT, SELEKSI, LATIHAN, TOKO, type Golongan } from '@/data/bala
 import { AKSI_SEBULAN, rupiah } from '@/data/ekonomi'
 import { hunian } from '@/data/hunian'
 import { pekerjaanDi } from '@/data/pekerjaan'
-import { AKSI_MAKS, MAKAN, kapasitasHunian } from '@/server/aturan'
+import { AKSI_MAKS, MAKAN, RUSUN, kapasitasHunian } from '@/server/aturan'
 import { syaratSeleksi } from '@/server/sistem-aturan'
 import type { Keadaan } from '@/server/tipe'
 import { lamaWaktu, panggil } from './api'
@@ -102,13 +102,22 @@ function DaftarLowongan({ daftar, k, bebas, lakukan }: { daftar: readonly Lowong
 }
 
 function Bursa(p: Props) {
+  // lowongan yang belum terjangkau dilipat: di ponsel daftar lengkapnya sampai puluhan layar
+  const bisa = p.k.lowongan.filter((l) => l.boleh || p.k.pekerjaan?.id === l.id)
+  const belum = p.k.lowongan.filter((l) => !l.boleh && p.k.pekerjaan?.id !== l.id)
   return (
     <section className="panel">
       <h2>Lowongan</h2>
       <p className="catatan">
         UMK Weton {rupiah(p.k.umk)} per bulan kota. Gaji sebulan dihitung untuk {AKSI_SEBULAN} aksi; bekerja lebih banyak, upahmu bertambah. Ganti pekerjaan dibatasi: sisa {p.k.gantiKerja.sisa} dari {p.k.gantiKerja.maks} kali pekan ini.
       </p>
-      <DaftarLowongan daftar={p.k.lowongan} {...p} />
+      <DaftarLowongan daftar={bisa} {...p} />
+      {belum.length > 0 && (
+        <details className="tentang">
+          <summary>Butuh Keahlian lebih tinggi ({belum.length})</summary>
+          <DaftarLowongan daftar={belum} {...p} />
+        </details>
+      )}
     </section>
   )
 }
@@ -176,6 +185,8 @@ function Kamar({ k, bebas, lakukan, jenis, idTempat, versi }: Props & { jenis: s
   const diSini = k.hunian?.tempat === idTempat
   const akanKeSini = k.hunianBerikut?.tempat === idTempat
   const penuh = terisi !== null && terisi >= kap && !diSini && !akanKeSini
+  // Rusunawa penuh: server tetap memberi kamar tambahan bila tidak meminta gedung tertentu
+  const tambahan = penuh && h.id === RUSUN.id
   const nomor = Number(kamar)
   return (
     <section className="panel aksi-utama">
@@ -203,12 +214,17 @@ function Kamar({ k, bebas, lakukan, jenis, idTempat, versi }: Props & { jenis: s
           <button
             type="button"
             className="tombol-utama"
-            disabled={!bebas || penuh || k.peran === 'walikota'}
+            disabled={!bebas || (penuh && !tambahan) || k.peran === 'walikota'}
             onClick={() =>
-              lakukan(`sewa-${idTempat}-${kamar}`, '/api/hunian', { hunian: h.id, tempat: idTempat, ...(Number.isInteger(nomor) && nomor > 0 ? { kamar: nomor } : {}) }, k.hunian ? `Pindah ke ${h.nama} mulai siklus tagihan berikutnya` : `Sekarang tinggal di ${h.nama}`)
+              lakukan(
+                `sewa-${idTempat}-${kamar}`,
+                '/api/hunian',
+                tambahan ? { hunian: h.id } : { hunian: h.id, tempat: idTempat, ...(Number.isInteger(nomor) && nomor > 0 ? { kamar: nomor } : {}) },
+                k.hunian ? `Pindah ke ${h.nama} mulai siklus tagihan berikutnya` : `Sekarang tinggal di ${h.nama}`,
+              )
             }
           >
-            {penuh ? 'Kamar penuh' : k.hunian ? 'Pindah ke sini' : 'Tinggal di sini'}
+            {tambahan ? 'Ambil kamar tambahan' : penuh ? 'Kamar penuh' : k.hunian ? 'Pindah ke sini' : 'Tinggal di sini'}
           </button>
         </>
       )}

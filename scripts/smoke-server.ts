@@ -87,6 +87,7 @@ try {
   })
 
   let kas = 0
+  let upahPerAksi = 0
   await langkah('daftar: akun baru mendapat uang saku, kuki HttpOnly dan SameSite', async () => {
     const r = await api('/api/daftar', 'POST', { body: { email, nama: 'Uji Smoke', sandi } })
     assert.equal(r.status, 201, r.teks)
@@ -119,6 +120,7 @@ try {
     assert.equal((await aksi('/api/hunian', { hunian: 'numpang' })).json.galat.kode, 'hunian_tidak_ada')
     const p = await aksi('/api/pekerjaan', { pekerjaan: 'kuli-angkut' })
     assert.equal(p.json.pekerjaan.id, 'kuli-angkut')
+    upahPerAksi = p.json.pekerjaan.upahPerAksi
     assert.equal((await aksi('/api/pekerjaan', { pekerjaan: 'admin-gudang' })).json.galat.kode, 'keahlian_kurang')
   })
 
@@ -126,7 +128,7 @@ try {
     const kunci = randomUUID()
     const a = await api('/api/kerja', 'POST', { body: { aksi: 2, kunci } })
     assert.equal(a.status, 200, a.teks)
-    assert.equal(a.json.kas, kas + 24_000)
+    assert.equal(a.json.kas, kas + 2 * upahPerAksi) // upah mengikuti UMK, jadi dibaca dari server
     assert.equal(a.json.tenaga.nilai, 80)
     const b = await api('/api/kerja', 'POST', { body: { aksi: 2, kunci } })
     assert.deepEqual(b.json, a.json)
@@ -136,16 +138,19 @@ try {
   await langkah('bonus harian sekali sehari', async () => {
     const a = await aksi('/api/bonus')
     assert.equal(a.status, 200, a.teks)
-    assert.equal(a.json.kas, kas + 20_000)
+    assert.equal(a.json.kas, kas + a.json.bonus.jumlah)
     kas = a.json.kas
     assert.equal((await aksi('/api/bonus')).json.galat.kode, 'bonus_sudah_diambil')
   })
 
-  await langkah('kursus menaikkan Keahlian dan memotong uang', async () => {
+  await langkah('kursus dimulai: uang terpotong, Keahlian naik saat kursus selesai', async () => {
+    const biaya = (await api('/api/saya', 'GET')).json.kursus.biaya
     const a = await aksi('/api/kursus')
     assert.equal(a.status, 200, a.teks)
-    assert.equal(a.json.keahlian, 2)
-    assert.equal(a.json.kas, kas - 100_000)
+    assert.equal(a.json.keahlian, 1)
+    assert.equal(a.json.latihan?.target, 2)
+    assert.equal(a.json.kas, kas - biaya)
+    assert.equal((await aksi('/api/kursus')).json.galat.kode, 'latihan_berjalan')
   })
 
   await langkah('riwayat memuat catatan ledger terbaru dulu', async () => {
@@ -187,7 +192,7 @@ try {
     assert.equal(salah.json.galat.kode, 'masuk_gagal')
     const benar = await api('/api/masuk', 'POST', { body: { email: email.toUpperCase(), sandi } })
     assert.equal(benar.status, 200, benar.teks)
-    assert.equal(benar.json.keahlian, 2)
+    assert.equal(benar.json.latihan?.target, 2)
     assert.equal((await api('/api/saya', 'GET')).status, 200)
   })
 } finally {

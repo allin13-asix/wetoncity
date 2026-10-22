@@ -42,6 +42,15 @@ export function useKeadaan() {
     muat()
   }, [muat])
 
+  // kembali ke tab atau aplikasi (umum di ponsel): muat ulang supaya pesan, permintaan teman, dan tagihan terbaru terlihat
+  useEffect(() => {
+    const segarkan = () => {
+      if (document.visibilityState === 'visible') muat()
+    }
+    document.addEventListener('visibilitychange', segarkan)
+    return () => document.removeEventListener('visibilitychange', segarkan)
+  }, [muat])
+
   useEffect(() => {
     const t = setInterval(() => setTik((n) => n + 1), 1000)
     return () => clearInterval(t)

@@ -44,7 +44,7 @@ Status (18 Oktober 2026): selesai dan teruji.
 
 **Penagihan.** Siklus 7 hari sejak bergabung (`tagihan_berikut`). Saat jatuh tempo: n siklus terlewat, ditagih paling banyak 2 (tradisi mudik), sisanya dihapus tanpa bunga, `tagihan_berikut += n x 7 hari`. Tiap siklus yang ditagih: bunga kasbon 10% dari kasbon berjalan (baris `bunga_kasbon`), lalu `tagihan_hidup` (sewa + listrik + makan setelah diskon), lalu `pajak` (siklus pertama saja, dari `upah_siklus`, lalu `upah_siklus = 0`). Bila kas kurang: bayar sebanyak kas, selisih menjadi `kasbon_baru`. Setelah tiap siklus, `hunian_berikut` berlaku. Penghuni Rusunawa yang Keahliannya sudah 6 lebih dari 28 hari dipindah ke Kost Melati.
 
-**Operasi** (semua butuh `kunci`, kecuali yang dicatat): `daftar` (kas 0 lalu `uang_saku` Rp 1.000.000, Tenaga 100, `tagihan_berikut` = +7 hari), `masuk`, `pilihHunian` (pertama kali langsung berlaku; selanjutnya menjadi `hunian_berikut`; Rusunawa: Keahlian di bawah 6, kuota 80), `ambilPekerjaan` (pekerjaan fase 0 SMA/SMK, Keahlian cukup), `kerja` (1 sampai 10 aksi, 10 Tenaga per aksi, upah `aksi x 10 x tarif tier pekerjaan x pengali Keahlian`, menambah `upah_siklus`), `kursus` (10 Tenaga dan biaya setelah diskon, Keahlian +1, mencatat `keahlian6_sejak`), `klaimBonus` (Rp 20.000 per tanggal WIB), `bayarKasbon`, `muat` (keadaan), `riwayat`. Belum boleh bekerja sebelum memilih hunian.
+**Operasi** (semua butuh `kunci`, kecuali yang dicatat): `daftar` (kas 0 lalu `uang_saku` Rp 1.000.000, Tenaga 100, `tagihan_berikut` = +7 hari), `masuk`, `pilihHunian` (pertama kali langsung berlaku; selanjutnya menjadi `hunian_berikut`; Rusunawa: Keahlian di bawah 6; bila semua gedung penuh dan pemain tidak meminta gedung tertentu, dibuka kamar tambahan sehingga pendatang tidak pernah terkunci), `ambilPekerjaan` (pekerjaan fase 0 SMA/SMK, Keahlian cukup), `kerja` (1 sampai 10 aksi, 10 Tenaga per aksi, upah `aksi x 10 x tarif tier pekerjaan x pengali Keahlian`, menambah `upah_siklus`), `kursus` (10 Tenaga dan biaya setelah diskon, Keahlian +1, mencatat `keahlian6_sejak`), `klaimBonus` (Rp 20.000 per tanggal WIB), `bayarKasbon`, `muat` (keadaan), `riwayat`. Belum boleh bekerja sebelum memilih hunian.
 
 ## API
 
@@ -97,6 +97,14 @@ Peran `walikota` (kolom `warga.peran`, migrasi 002) untuk pemilik kota yang ingi
 - **Pratinjau Koran:** Wali Kota yang sedang masuk melihat semua edisi, termasuk yang belum terbit. Edisi yang dibuka dalam mode ini tidak ditandai sudah dibaca.
 - **Akun bawaan:** `pnpm walikota` membuat "Khairul Wianto" dengan email `walikota@weton.test` dan kata sandi `walikota123`; ubah dengan `--nama`, `--email`, `--sandi`. Jalankan ulang untuk memulihkan akun atau mengatur ulang kata sandi.
 - Dana Wali Kota dihitung `lain` di `ledger_golongan`, jadi rasio faucet dan sink pemain biasa tidak tercemar. Saldo tetap sama dengan jumlah ledger (diperiksa uji invarian).
+
+## Kota terbuka dan nyaman di ponsel (21 Oktober 2026)
+
+- **Region.** `vercel.json` mematok fungsi di `sin1`, sekolokasi dengan Supabase `sin1`. Satu aksi memakai 2 sampai 3 round-trip berurutan (`pnpm ukur`), jadi fungsi di region lain melipatgandakan waktu tiap aksi.
+- **Kapasitas.** Kost dan hotel tetap langka (Kost Melati 8 kamar se-kota, Mawar 12, Anggrek 8, Hotel 40). Rusunawa membuka kamar tambahan bila semua gedungnya penuh, dan Kuli angkut pelabuhan tanpa kuota (`KUOTA.perPekerjaan`), jadi berapa pun jumlah warga, pendatang selalu bisa tinggal dan bekerja.
+- **Rawat inap karena lapar** dihitung dari saat seharusnya terjadi (`hitungLapar` mengembalikan waktunya). Pemain yang lama tidak membuka game ditagih sekali dan tidak terkunci satu jam saat kembali; jam lapar mulai dari saat ia kembali.
+- **Pekan peringkat** hanya maju: `tutupPekan` tidak menutup pekan yang sudah ditutup (sebelumnya jam tertinggal bisa memicu duplicate key).
+- **Uji.** `pnpm uji:server` 60 uji (warga uji tagihan selalu kenyang lewat `muatKenyang`, hadiah mingguan dimatikan untuk seluruh jalan uji, `SARING=teks` untuk sebagian uji). Uji kesetaraan memakai `simulasi({ kursus: false })` karena simulasi belum memodelkan kursus berdurasi dan lapar. `pnpm smoke` membaca upah dan biaya kursus dari server.
 
 ## Celah yang diketahui
 
