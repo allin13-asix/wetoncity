@@ -20,7 +20,8 @@ import { BANGUN, BANGUNAN_MILIK, GANTI_KERJA, HADIAH, INVENTORI, LAPAR, LATIHAN,
 import { semuaPekerjaan, type Pekerjaan } from '../data/pekerjaan.ts'
 import type { Sql, Tx as TxMentah } from './db.ts'
 import { Galat } from './galat.ts'
-import { tambahItem } from './inventori.ts'
+import { defApaSaja } from './barangKustom.ts'
+import { namaBarang, tambahItem } from './inventori.ts'
 import { catatAktivitas, pastikanPekan } from './kemajuan.ts'
 import { koranBasi, terapkanKoran, terbaru, type BarisKoran } from './koran.ts'
 import { adalahTx, bungkus, type Tx } from './kueri.ts'
@@ -1055,7 +1056,7 @@ export async function tambahGudang(tx: Tx, id: string, barang: Barang, jumlah: n
     insert into gudang (warga_id, barang, jumlah) values (${id}, ${barang}, 0)
     on conflict (warga_id, barang) do update set jumlah = gudang.jumlah returning jumlah`
   const baru = g.jumlah + jumlah
-  if (baru < 0) throw new Galat('barang_kurang', `${BARANG[barang].nama} di gudang tidak cukup.`, 409)
+  if (baru < 0) throw new Galat('barang_kurang', `${namaBarang(barang)} di gudang tidak cukup.`, 409)
   if (baru > PASAR.gudangMaks) throw new Galat('gudang_penuh', `Gudang paling banyak ${PASAR.gudangMaks} kg per barang.`, 409)
   tx.tulis`update gudang set jumlah = ${baru} where warga_id = ${id} and barang = ${barang}`
 }
@@ -1164,15 +1165,15 @@ const jumlahSah = (n: number) => {
  * KONSUMSI.kaliPerHari per tanggal WIB. Ditolak bila tidak ada yang perlu dipulihkan.
  */
 export async function pakaiBarang(tx: Tx, w: Warga, barang: string, now: Date): Promise<void> {
-  if (!adalahBarang(barang) || BARANG[barang].jenis !== 'konsumsi') throw new Galat('bukan_konsumsi', 'Barang itu tidak bisa dipakai.')
+  const def = await defApaSaja(tx, barang)
+  if (!def || def.jenis !== 'konsumsi') throw new Galat('bukan_konsumsi', 'Barang itu tidak bisa dipakai.')
   const hari = tanggalWIB(now)
   const kali = w.konsumsi_tanggal === hari ? w.konsumsi_kali : 0
   if (kali >= KONSUMSI.kaliPerHari) throw new Galat('konsumsi_habis', `Sudah ${KONSUMSI.kaliPerHari} kali hari ini. Besok lagi.`, 409)
-  const def = BARANG[barang] as { tenaga: number; kesehatan?: number; lapar?: number }
   const maks = tenagaMaks(w.hunian_id, w.peran)
   const perlu = w.tenaga < maks || (!!def.kesehatan && w.kesehatan < KESEHATAN.maks) || (!!def.lapar && w.lapar < LAPAR.maks)
   if (!perlu) throw new Galat('tenaga_penuh', 'Tenaga, kesehatan, dan perutmu masih penuh.', 409)
-  await tambahGudang(tx, w.id, barang, -1)
+  await tambahGudang(tx, w.id, barang as Barang, -1)
   w.tenaga = Math.min(maks, w.tenaga + def.tenaga)
   if (def.kesehatan) w.kesehatan = Math.min(KESEHATAN.maks, w.kesehatan + def.kesehatan)
   if (def.lapar) isiLapar(w, def.lapar, now)

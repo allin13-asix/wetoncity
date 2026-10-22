@@ -204,6 +204,8 @@ export type Keadaan = {
   /** hasil memancing terakhir dalam jawaban ini */
   tangkapan?: { berhasil: boolean; barang?: string; jumlah?: number; kelangkaan?: string; nilai?: 'sempurna' | 'bagus' | 'meleset' | 'terlambat' }
   /** hasil putaran roulette terakhir dalam jawaban ini */
+  /** hasil alat super Wali Kota: jumlah penerima bansos */
+  walikota?: { penerima?: number }
   roulette?: { nomor: number; warna: string; taruhan: number; kembali: number; rincian: Array<{ jenis: string; nilai?: number; jumlah: number; menang: boolean; kembali: number }> }
   /** hasil tes seleksi terakhir dalam jawaban ini */
   tes?: { lulus: boolean; skor: number; nilaiLulus: number }

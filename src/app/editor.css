@@ -75,8 +75,8 @@
   cursor: grab; user-select: none; -webkit-user-drag: none; touch-action: pan-y;
 }
 .editor-kartu small { font-weight: 500; color: var(--redup); }
-.editor-kartu[aria-pressed='true'] { border-color: var(--papan); box-shadow: inset 0 0 0 1px var(--papan); }
-.editor-kartu:focus-visible { outline: 3px solid var(--papan); outline-offset: 2px; }
+.editor-kartu[aria-pressed='true'] { border-color: var(--tinta); box-shadow: inset 0 0 0 1px var(--tinta); }
+.editor-kartu:focus-visible { outline: 3px solid var(--tinta); outline-offset: 2px; }
 .editor-tapak { width: 36px; max-height: 30px; border-radius: 3px; border-bottom: 3px solid #ffd400; }
 .editor-hantu { pointer-events: none; }
 .editor-hantu rect { fill: #ffffff; fill-opacity: 0.55; stroke: #2d5bd0; stroke-width: 0.3; stroke-dasharray: 0.6 0.4; }

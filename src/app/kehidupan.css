@@ -26,7 +26,7 @@
 
 /* roulette */
 .rl-chip { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.rl-chip button { min-width: 56px; min-height: 40px; padding: 0 10px; border: 2px solid var(--papan); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 800; cursor: pointer; }
+.rl-chip button { min-width: 56px; min-height: 40px; padding: 0 10px; border: 2px solid var(--tinta); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-weight: 800; cursor: pointer; }
 .rl-chip button[aria-pressed='true'] { background: var(--bollard); border-color: var(--bollard); color: #1b1500; }
 .rl-meja { display: grid; gap: 4px; padding: 8px; border-radius: 14px; background: #0f5a3a; color: #fff; overflow-x: auto; }
 .rl-angka { display: grid; grid-template-columns: repeat(12, minmax(34px, 1fr)); grid-template-rows: repeat(3, 1fr); grid-auto-flow: column; gap: 3px; min-width: 440px; }
@@ -46,9 +46,28 @@
 .rl-bola.hijau { background: #1b7f4f; }
 
 /* memancing */
-.pancing-bar { position: relative; height: 44px; margin: 12px 0; overflow: hidden; border: 2px solid var(--papan); border-radius: 12px; background: linear-gradient(180deg, #8fd0e6, #4a9bbd); }
+.pancing-bar { position: relative; height: 44px; margin: 12px 0; overflow: hidden; border: 2px solid var(--tinta); border-radius: 12px; background: linear-gradient(180deg, #8fd0e6, #4a9bbd); }
 .pancing-bar .zona { position: absolute; top: 0; bottom: 0; background: rgb(60 190 110 / 0.75); }
 .pancing-bar .penanda { position: absolute; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #fff; box-shadow: 0 0 0 2px #151515; }
 .pancing-bar em { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 0.6); pointer-events: none; }
 .pancing-bar.gigit { border-color: var(--bollard); }
 .pancing-bar.lewat { filter: grayscale(0.8); }
+
+/* Universitas: kartu jurusan selebar panel, tombol penuh, tidak melebar ke samping */
+.kuliah { min-width: 0; overflow-x: hidden; }
+.kuliah-judul { margin: 6px 0 4px; }
+.kuliah-progres { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--redup); font-variant-numeric: tabular-nums; }
+.kuliah-aksi { display: grid; gap: 8px; margin-top: 12px; }
+.kuliah-aksi > button { width: 100%; justify-content: center; min-height: 52px; }
+.kuliah-aksi.lengket { position: sticky; bottom: 0; padding: 8px 0 2px; background: linear-gradient(transparent, var(--kapur) 30%); }
+.pilih-jurusan { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+.pilih-jurusan button { width: 100%; min-width: 0; text-align: left; }
+.pilih-jurusan span:first-child { min-width: 0; }
+.pilih-jurusan small { display: block; overflow-wrap: anywhere; }
+
+/* roda roulette 2D */
+.rl-panggung { position: relative; width: min(100%, 300px); margin: 8px auto 4px; }
+.rl-roda { display: block; width: 100%; height: auto; filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.35)); }
+.rl-hasil { position: absolute; right: 0; top: 0; min-width: 40px; height: 40px; font-size: 18px; box-shadow: 0 0 0 3px var(--kertas); animation: timbul 0.3s ease-out; }
+@keyframes timbul { from { transform: scale(0.4); opacity: 0; } }
+.adegan-pancing { display: block; width: 100%; height: auto; margin: 8px 0 4px; border-radius: 14px; border: 2px solid var(--tinta); background: #7cc4e4; }

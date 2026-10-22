@@ -60,31 +60,39 @@ export function Perjalanan({ k, bebas, lakukan }: Props) {
 export function Kuliah({ k, tenaga, bebas, lakukan }: Props) {
   const [pilih, setPilih] = useState(jurusan[0].id)
   const kj = k.kuliah
+  const dipilih = jurusan.find((j) => j.id === pilih)!
   return (
-    <section className="panel kantor">
+    <section className="panel kuliah">
       <h2>Universitas Weton</h2>
-      {k.ijazah && <p>Ijazah: {k.ijazah.nama}. Pekerjaan Tier {k.ijazah.jenjang === 'D3' ? 4 : 5} yang cocok sudah muncul di Bursa Kerja.</p>}
+      {k.ijazah && <p className="catatan">Ijazah: {k.ijazah.nama}. Pekerjaan Tier {k.ijazah.jenjang === 'D3' ? 4 : 5} yang cocok sudah muncul di Bursa Kerja.</p>}
       {kj ? (
         <>
-          <p>
-            {kj.jurusan.nama}: semester {kj.semester} dari {kj.totalSemester}, sesi {kj.sesi} dari {kj.sesiPerSemester}.
-          </p>
-          <div className="baris-aksi">
+          <p className="kuliah-judul"><strong>{kj.jurusan.nama}</strong></p>
+          <div className="kuliah-progres">
+            <span>Semester {kj.semester}/{kj.totalSemester}</span>
+            <span>Sesi {kj.sesi}/{kj.sesiPerSemester}</span>
+          </div>
+          <div className="batang" aria-hidden="true">
+            <span style={{ width: `${Math.round((((kj.semester - 1) * kj.sesiPerSemester + kj.sesi) / (kj.totalSemester * kj.sesiPerSemester)) * 100)}%` }} />
+          </div>
+          <div className="kuliah-aksi">
             {!kj.uktLunas ? (
-              <button type="button" className="tombol-sekunder" disabled={!bebas || k.kas < kj.ukt} onClick={() => lakukan('ukt', '/api/kuliah', { aksi: 'ukt' }, `UKT semester ${kj.semester} lunas`)}>
-                Bayar UKT {rupiah(kj.ukt)}
+              <button type="button" className="tombol-utama" disabled={!bebas || k.kas < kj.ukt} onClick={() => lakukan('ukt', '/api/kuliah', { aksi: 'ukt' }, `UKT semester ${kj.semester} lunas`)}>
+                Bayar UKT
+                <small>{rupiah(kj.ukt)}</small>
               </button>
             ) : (
               <button
                 type="button"
-                className="tombol-sekunder"
+                className="tombol-utama"
                 disabled={!bebas || !kj.bisaHariIni || tenaga < SESI_KULIAH.tenaga}
                 onClick={() => lakukan('sesi', '/api/kuliah', { aksi: 'sesi' }, (b) => (b.ijazah && !b.kuliah ? `Selamat, kamu lulus ${b.ijazah.nama}!` : 'Sesi kuliah selesai'))}
               >
-                {kj.bisaHariIni ? `Ikut kuliah (${SESI_KULIAH.tenaga} Tenaga)` : 'Sesi hari ini selesai'}
+                {kj.bisaHariIni ? 'Ikut kuliah' : 'Sesi hari ini selesai'}
+                {kj.bisaHariIni && <small>{SESI_KULIAH.tenaga} Tenaga</small>}
               </button>
             )}
-            <button type="button" className="tombol-sekunder" disabled={!bebas} onClick={() => lakukan('berhenti', '/api/kuliah', { aksi: 'berhenti' }, 'Berhenti kuliah')}>
+            <button type="button" className="tombol-sekunder" disabled={!bebas} onClick={() => confirm('Berhenti kuliah? Kemajuanmu hilang.') && lakukan('berhenti', '/api/kuliah', { aksi: 'berhenti' }, 'Berhenti kuliah')}>
               Berhenti
             </button>
           </div>
@@ -92,19 +100,23 @@ export function Kuliah({ k, tenaga, bebas, lakukan }: Props) {
       ) : (
         <>
           <p className="catatan">Satu sesi per hari, lima sesi per semester. UKT dibayar di awal tiap semester.</p>
-          <label>
-            Jurusan
-            <select value={pilih} onChange={(e) => setPilih(e.target.value)}>
-              {jurusan.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.nama} ({j.semester} semester, {rupiah(j.ukt)})
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="baris-aksi rata-kiri">
-            <button type="button" className="tombol-sekunder" disabled={!bebas} onClick={() => lakukan(`daftar-${pilih}`, '/api/kuliah', { aksi: 'daftar', jurusan: pilih }, 'Terdaftar sebagai mahasiswa')}>
-              Daftar kuliah
+          <ul className="pilih-kerja pilih-jurusan">
+            {jurusan.map((j) => (
+              <li key={j.id}>
+                <button type="button" aria-pressed={j.id === pilih} onClick={() => setPilih(j.id)}>
+                  <span>
+                    <strong>{j.nama}</strong>
+                    <small>{j.semester} semester · {j.ringkas}</small>
+                  </span>
+                  <span className="upah">{rupiah(j.ukt)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="kuliah-aksi lengket">
+            <button type="button" className="tombol-utama" disabled={!bebas} onClick={() => lakukan(`daftar-${pilih}`, '/api/kuliah', { aksi: 'daftar', jurusan: pilih }, 'Terdaftar sebagai mahasiswa')}>
+              Daftar {dipilih.nama}
+              <small>UKT {rupiah(dipilih.ukt)} per semester</small>
             </button>
           </div>
         </>

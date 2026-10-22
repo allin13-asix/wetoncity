@@ -1,12 +1,15 @@
 'use client'
 
 // Hiburan dan belanja: Rumah Judi Mujur (roulette Eropa), memancing di pantai, dan minimarket.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MEMANCING, ROULETTE } from '@/data/balans'
 import { rupiah } from '@/data/ekonomi'
 import { posisiPenanda, warnaKantong, type JenisTaruhan } from '@/server/sistem-aturan'
 import { panggil } from './api'
 import type { Props } from './FiturKota'
+import { AdeganPancing } from './AdeganPancing'
+import { IkonBarang } from './IkonBarang'
+import { RodaRoulette } from './RodaRoulette'
 
 // ---------------------------------------------------------------- roulette
 
@@ -49,6 +52,18 @@ export function Roulette({ k, tenaga, bebas, lakukan, versi }: Props & { versi: 
   }
   const hasil = k.roulette
   const warna = (n: number) => warnaKantong(n)
+  // setiap hasil baru dari server memutar roda; pesan hasil baru muncul setelah bola berhenti
+  const [putaran, setPutaran] = useState(0)
+  const [berputar, setBerputar] = useState(false)
+  const [menunggu, setMenunggu] = useState(false)
+  const lama = useRef(hasil)
+  useEffect(() => {
+    if (hasil && hasil !== lama.current) {
+      setPutaran((n) => n + 1)
+      setBerputar(true)
+    }
+    lama.current = hasil
+  }, [hasil])
 
   return (
     <section className="panel">
@@ -57,7 +72,12 @@ export function Roulette({ k, tenaga, bebas, lakukan, versi }: Props & { versi: 
         Roulette Eropa 37 kantong (0-36), undian di server. Uang game, bukan uang sungguhan. Taruhan {rupiah(ROULETTE.taruhanMin)} sampai {rupiah(ROULETTE.taruhanMaks)} per pasang, total paling banyak{' '}
         {rupiah(ROULETTE.totalMaks)}. Tiap putaran {ROULETTE.tenaga} Tenaga.
       </p>
-      {hasil && (
+      <div className="rl-panggung">
+        <RodaRoulette nomor={hasil?.nomor ?? null} putaran={putaran} menunggu={menunggu} onSelesai={() => setBerputar(false)} />
+        {hasil && !berputar && !menunggu && <strong className={`rl-bola rl-hasil ${warna(hasil.nomor)}`}>{hasil.nomor}</strong>}
+      </div>
+      {(berputar || menunggu) && <p className="pesan">Roda berputar...</p>}
+      {hasil && !berputar && !menunggu && (
         <p className={`pesan ${hasil.kembali > hasil.taruhan ? 'ok' : 'galat'}`}>
           Bola jatuh di <strong className={`rl-bola ${warna(hasil.nomor)}`}>{hasil.nomor}</strong> ({warna(hasil.nomor)}). Taruhan {rupiah(hasil.taruhan)}, kembali {rupiah(hasil.kembali)}
           {hasil.kembali === hasil.taruhan ? ' (impas)' : hasil.kembali > hasil.taruhan ? `, untung ${rupiah(hasil.kembali - hasil.taruhan)}` : `, rugi ${rupiah(hasil.taruhan - hasil.kembali)}`}.
@@ -110,14 +130,16 @@ export function Roulette({ k, tenaga, bebas, lakukan, versi }: Props & { versi: 
         <button
           type="button"
           className="tombol-utama"
-          disabled={!bebas || bets.length === 0 || k.kas < total || tenaga < ROULETTE.tenaga || total > ROULETTE.totalMaks}
+          disabled={berputar || !bebas || bets.length === 0 || k.kas < total || tenaga < ROULETTE.tenaga || total > ROULETTE.totalMaks}
           onClick={async () => {
+            setMenunggu(true)
             const ok = await lakukan(
               `roulette-${total}-${bets.length}`,
               '/api/judi',
               { taruhan: bets },
-              (b) => (b.roulette ? `Bola jatuh di ${b.roulette.nomor} (${b.roulette.warna})` : 'Putaran selesai'),
+              'Roda diputar',
             )
+            setMenunggu(false)
             if (ok) setBets([])
           }}
         >
@@ -195,13 +217,31 @@ export function Memancing({ k, tenaga, bebas, lakukan }: Props) {
   const fase = !p ? 'diam' : sekarang < gigit ? 'tunggu' : sekarang <= gigit + MEMANCING.jendelaMs ? 'gigit' : 'lewat'
   const pos = p && fase === 'gigit' ? posisiPenanda({ gigit }, sekarang) : 0
   const t = k.tangkapan
+  // tiap jawaban tarikan baru memutar animasi hasil di adegan
+  const [hasilKe, setHasilKe] = useState(0)
+  const [menarik, setMenarik] = useState(false)
+  const tLama = useRef(t)
+  useEffect(() => {
+    if (t && t !== tLama.current) setHasilKe((n) => n + 1)
+    tLama.current = t
+  }, [t])
 
   return (
     <section className="panel aksi-utama">
       <h2>Memancing</h2>
       <p className="catatan">
-        Lempar kail ({MEMANCING.tenaga} Tenaga), tunggu ikan menggigit, lalu tarik tepat saat penanda di zona hijau. Ikan umum, jarang, dan langka masuk inventori.
+        Lempar kail ({MEMANCING.tenaga} Tenaga), tunggu pelampung tenggelam, lalu tarik tepat saat penanda di zona hijau. Ikan umum, jarang, dan langka masuk inventori.
       </p>
+      <AdeganPancing
+        fase={fase}
+        jam={() => Date.now() + offset}
+        lempar={p ? Date.parse(p.lempar) : null}
+        gigit={p ? gigit : null}
+        tengah={p?.tengah ?? 0.5}
+        hasil={t ? { berhasil: t.berhasil, barang: t.barang } : null}
+        hasilKe={hasilKe}
+        menarik={menarik}
+      />
       {t && !p && (
         <p className={`pesan ${t.berhasil ? 'ok' : 'galat'}`}>
           {t.berhasil ? `Dapat ${t.jumlah} ikan (${t.kelangkaan}${t.nilai === 'sempurna' ? ', tarikan sempurna' : ''}). Cek inventori.` : t.nilai === 'terlambat' ? 'Terlambat menarik, ikan lepas.' : 'Meleset, ikan lepas.'}
@@ -223,7 +263,11 @@ export function Memancing({ k, tenaga, bebas, lakukan }: Props) {
             <small>{MEMANCING.tenaga} Tenaga</small>
           </button>
         ) : (
-          <button type="button" className="tombol-utama" disabled={!bebas} onClick={() => lakukan('tarik', '/api/pancing', { aksi: 'tarik' }, (b) => (b.tangkapan?.berhasil ? 'Ikan tertangkap!' : 'Ikan lepas'))}>
+          <button type="button" className="tombol-utama" disabled={!bebas} onClick={async () => {
+            setMenarik(true)
+            await lakukan('tarik', '/api/pancing', { aksi: 'tarik' }, (b) => (b.tangkapan?.berhasil ? 'Ikan tertangkap!' : 'Ikan lepas'))
+            setMenarik(false)
+          }}>
             Tarik!
           </button>
         )}
@@ -279,7 +323,8 @@ export function Minimarket({ toko, k, bebas, lakukan, versi }: Props & { toko: s
       </label>
       <ul className="lowongan">
         {ini.produk.map((p) => (
-          <li key={p.id}>
+          <li key={p.id} className="baris-barang">
+            <IkonBarang id={p.id} jenis="konsumsi" />
             <span>
               <strong>
                 {p.nama} {p.hargaPromo < p.harga ? <><s>{rupiah(p.harga)}</s> {rupiah(p.hargaPromo)}</> : rupiah(p.harga)}

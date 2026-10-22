@@ -9,6 +9,7 @@ import { BARANG, adalahBarang, bolehAmbil, lowonganUntuk, minKeahlianUntuk, peke
 import type { Sql } from './db.ts'
 import { Galat } from './galat.ts'
 import { acakAman, catat, dalamTransaksi, pakaiBarang, pasangKerja, wajibMulai } from './game.ts'
+import { barangDikenal, defApaSaja } from './barangKustom.ts'
 import { isiInventori, kurangiItem, namaBarang, tambahItem } from './inventori.ts'
 import { catatAktivitas } from './kemajuan.ts'
 import { bungkus, type Tx } from './kueri.ts'
@@ -62,7 +63,7 @@ export const inventori = (sql: Sql, id: string, kunci: string, p: PerintahInvent
   dalamTransaksi(sql, id, { kunci, aksi: 'inventori', now }, async (tx, w) => {
     wajibMulai(w)
     if (p.aksi === 'klaim') return klaimSurat(tx, w, p.surat ? wajibUuid(p.surat, 'ID surat') : null, kunci, now)
-    if (!adalahBarang(p.barang)) throw new Galat('barang_tidak_ada', 'Barang itu tidak dikenal.')
+    if (!(await barangDikenal(tx, p.barang))) throw new Galat('barang_tidak_ada', 'Barang itu tidak dikenal.')
     if (p.aksi === 'pakai') return pakaiBarang(tx, w, p.barang, now)
     const jumlah = jumlahSah(p.jumlah)
     if (p.aksi === 'buang') return kurangiItem(tx, w.id, p.barang, jumlah)
@@ -94,13 +95,13 @@ export async function lihatInventori(sql: Sql, id: string) {
   return {
     kapasitas: INVENTORI.kapasitas,
     dipakai,
-    barang: barang.map((b) => {
-      const def = adalahBarang(b.barang) ? (BARANG[b.barang] as { nama: string; jenis: string; satuan: string; ringkas: string; tenaga?: number; kesehatan?: number; lapar?: number }) : null
+    barang: await Promise.all(barang.map(async (b) => {
+      const def = await defApaSaja(q, b.barang)
       return {
         id: b.barang, jumlah: b.jumlah, nama: def?.nama ?? b.barang, jenis: def?.jenis ?? 'lain', satuan: def?.satuan ?? '', ringkas: def?.ringkas ?? '',
-        tenaga: def?.tenaga ?? 0, kesehatan: def?.kesehatan ?? 0, lapar: def?.lapar ?? 0, bisaDipakai: def?.jenis === 'konsumsi',
+        tenaga: def?.tenaga ?? 0, kesehatan: def?.kesehatan ?? 0, lapar: def?.lapar ?? 0, bisaDipakai: def?.jenis === 'konsumsi', ikon: def?.ikon ?? null,
       }
-    }),
+    })),
     surat: surat.map((s) => ({
       id: s.id, pengirim: s.pengirim, judul: s.judul, item: s.item, namaItem: s.item ? namaBarang(s.item) : null, jumlah: s.jumlah, uang: s.uang,
       sumber: s.sumber, waktu: s.dibuat_pada.toISOString(),
