@@ -71,6 +71,15 @@ DATABASE_URL_UJI=postgres://weton_city:KATA_SANDI_BARU@127.0.0.1:5544/weton_city
 | `/mulai` | Memilih tempat tinggal. `?pindah=1` untuk pindah (berlaku siklus tagihan berikutnya) |
 | `/beranda` | Uang, Tenaga, kerja, Bursa Kerja, kursus, bonus harian, tagihan, kasbon, riwayat |
 
+## Aplikasi terpasang (PWA)
+
+Weton City bisa dipasang ke layar utama ponsel dan dibuka layar penuh seperti aplikasi.
+
+- `src/app/manifest.ts`: nama, warna, ikon, dan pintasan (Peta, Beranda, Pasar, Pesan).
+- Ikon: `src/app/icon.svg` (sudut membulat) dan `public/ikon-penuh.svg` (penuh-bidang) menjadi `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable-512.png`, dan `src/app/apple-icon.png`. Bila logo berubah, render ulang PNG-nya dari kedua SVG itu.
+- `public/sw.js`: pengingat web push dan halaman `public/offline.html` saat dibuka tanpa internet. Hanya halaman offline yang di-cache; halaman, API, dan aset lain selalu dari jaringan. Header `no-cache` untuk `sw.js` ada di `next.config.ts`.
+- Tombol "Pasang di layar utama" (`src/ui/Pwa.tsx`) ada di Beranda dan menu peta: Android dan Chrome memakai dialog pasang bawaan, iPhone mendapat petunjuk Bagikan lalu Tambah ke Layar Utama. Tidak tampil bila sudah dibuka dari layar utama.
+
 ## Struktur
 
 ```

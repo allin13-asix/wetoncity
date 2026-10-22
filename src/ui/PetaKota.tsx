@@ -16,7 +16,9 @@ import { Daftar, Malam, Menu, Pagi, PutarKanan, PutarKiri, Rute, Siang, Sore, Tu
 import PanelBangunan from './PanelBangunan'
 import PanelTur from './PanelTur'
 import { PanelLahan } from './PropertiPanel'
+import { navLain, navUtama } from './navigasi'
 import { Merek } from './Papan'
+import { TombolPasang } from './Pwa'
 
 const Adegan = dynamic(() => import('@/kota/Adegan'), {
   ssr: false,
@@ -191,15 +193,16 @@ export default function PetaKota() {
             </button>
             {menu && (
               <nav className="menu-daftar" aria-label="Menu utama">
-                <Link href="/" aria-current="page">Peta</Link>
-                <Link href="/pasar">Pasar</Link>
-                <Link href="/inventori">Inventori</Link>
-                <Link href="/peringkat">Peringkat</Link>
-                <Link href="/koran">Koran</Link>
-                <Link href="/galeri">Galeri aset</Link>
-                <Link href="/warga">Warga</Link>
-                <Link href="/panduan">Panduan</Link>
-                {st.masuk !== null && <Link href={st.masuk ? '/beranda' : '/masuk'}>{st.masuk ? 'Beranda dan KTP' : 'Masuk'}</Link>}
+                {/* navigasi utama sudah ada di navigasi bawah ponsel, jadi hanya tampil di layar lebar */}
+                {navUtama(!!st.masuk)
+                  .filter((t) => t.href !== '/')
+                  .map((t) => (
+                    <Link key={t.href} href={t.href} className="hanya-lebar">{t.label}</Link>
+                  ))}
+                {navLain(!!st.masuk).map((t) => (
+                  <Link key={t.href} href={t.href}>{t.label}</Link>
+                ))}
+                <TombolPasang ringkas />
               </nav>
             )}
           </div>

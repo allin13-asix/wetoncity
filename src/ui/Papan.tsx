@@ -2,18 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { navLain, navUtama, sedangDibuka } from './navigasi'
 import { useSesi } from './sesi'
-
-const tautan = [
-  { href: '/', label: 'Peta' },
-  { href: '/pasar', label: 'Pasar' },
-  { href: '/inventori', label: 'Inventori' },
-  { href: '/peringkat', label: 'Peringkat' },
-  { href: '/koran', label: 'Koran' },
-  { href: '/galeri', label: 'Galeri aset' },
-  { href: '/warga', label: 'Warga' },
-  { href: '/panduan', label: 'Panduan' },
-]
 
 export function Merek({ kecil = false }: { kecil?: boolean }) {
   return (
@@ -33,11 +23,14 @@ export default function Papan() {
     <header className="papan">
       <Merek />
       <nav aria-label="Menu utama">
-        {tautan.map((t) => (
-          <Link key={t.href} href={t.href} aria-current={path === t.href || path.startsWith(`${t.href}/`) ? 'page' : undefined}>
-            {t.label}
-          </Link>
-        ))}
+        {/* Beranda atau Masuk sudah menjadi tombol akun di kanan */}
+        {[...navUtama(!!sesi?.masuk), ...navLain(!!sesi?.masuk)]
+          .filter((t) => t.href !== '/beranda' && t.href !== '/masuk')
+          .map((t) => (
+            <Link key={t.href} href={t.href} aria-current={sedangDibuka(t.href, path) ? 'page' : undefined}>
+              {t.label}
+            </Link>
+          ))}
       </nav>
       {akun && (
         <Link href={akun.href} className="nav-akun" aria-current={akun.href === path ? 'page' : undefined}>
